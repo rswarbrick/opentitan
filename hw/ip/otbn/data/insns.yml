@@ -170,16 +170,6 @@ encoding-schemes:
     parents:
       - rv(opcode=b11110)
 
-  # A specialised encoding for the loopi instruction (which, unusually, has 2
-  # immediates)
-  loopi:
-    parents:
-      - custom0
-      - funct3(funct3=b001)
-    fields:
-      bodysize: 31-20
-      iterations: 19-15,11-7
-
   # A partial scheme for bignum instructions that produce a dest WDR.
   wrd:
     fields:
@@ -199,16 +189,81 @@ encoding-schemes:
     fields:
       fg: 31
 
+  # A partial scheme that defines the shift fields (type and bytes)
+  shift:
+    fields:
+      shift_type: 30
+      shift_bytes: 29-25
+
+  # A partial scheme that defines a function field at bit 31 for OTBN logical
+  # operations
+  funct31:
+    fields:
+      funct31: 31
+
+  # A partial scheme for specialized 2 bit function field, we need a reduced
+  # size in the lower two bits of funct3 as RSHI spills over 1 bit from its
+  # immediate
+  funct2:
+    fields:
+      funct2: 13-12
+
+  # A specialised encoding for the loopi instruction (which, unusually, has 2
+  # immediates)
+  loop:
+    parents:
+      - custom3
+      - funct2(funct2=b00)
+    fields:
+      bodysize: 31-20
+      grs: 19-15
+      fixed:
+        bits: 14,11-7
+        value: bxxxxxx
+
+  # A specialised encoding for the loop instruction (only one source, no
+  # destination)
+  loopi:
+    parents:
+      - custom3
+      - funct2(funct2=b01)
+    fields:
+      bodysize: 31-20
+      iterations: 19-15,11-7
+      fixed:
+        bits: 14
+        value: bx
+
+  # Used for bignum logical operations (and, or, xor).
+  bna:
+    parents:
+      - custom1
+      - wdr3
+      - funct3
+      - shift
+      - funct31
+
+  # Used for bignum not (no second source reg).
+  bnan:
+    parents:
+      - custom1
+      - shift
+      - funct31
+      - wrd
+    fields:
+      wrs1: 24-20
+      fixed:
+        bits: 19-15
+        value: bxxxxx
+
   # Used for the bignum reg/reg ALU instructions.
   bnaf:
     parents:
       - custom1
       - wdr3
       - funct3
+      - shift
       - fg
-    fields:
-      st: 30
-      shift_bytes: 29-25
 
   # Used for the bignum addi and subi instructions.
   bnai:
@@ -225,7 +280,14 @@ encoding-schemes:
   # Used for the bn.addm, bn.subm
   bnam:
     parents:
-      - bnaf(fg=bx, st=bx, shift_bytes=bxxxxx)
+      - custom1
+      - wdr3
+      - funct3
+    fields:
+      sub: 30
+      fixed:
+        bits: 31,29-25
+        value: bxxxxxx
 
   # Used for bn.mulqacc
   bnaq:
@@ -255,26 +317,22 @@ encoding-schemes:
     parents:
       - custom0
       - wdr3
-      - funct3(funct3=b010)
+      - funct3(funct3=b000)
       - fg
     fields:
-      funct4: 30-27
+      fixed:
+        bits: 30-27
+        value: bxxxx
       flag: 26-25
 
   # Used by bn.cmp and bn.cmpb
   bnc:
     parents:
       - custom0
-    fields:
-      fg: 31
-      st: 30
-      shift_bytes: 29-25
-      wrs2: 24-20
-      wrs1: 19-15
-      funct4: 14-11
-      fixed:
-        bits: 10-7
-        value: bxxxx  
+      - wdr3(wrd=bxxxxx)
+      - funct3
+      - shift
+      - fg
 
   # Used by bn.lid and bn.sid
   bnxid:
@@ -311,10 +369,13 @@ encoding-schemes:
       - custom0
       - funct3(funct3=b111)
     fields:
-      funct4: 31-28
+      write: 31
       wcsr: 27-20
       wrs: 19-15
       wrd: 11-7
+      fixed:
+        bits: 30-28
+        value: bxxx
 
 # The instructions. Instructions are listed in the given order within
 # each instruction group. There are the following fields:
@@ -691,13 +752,10 @@ insns:
       )
       ```
     encoding:
-      scheme: I
-      mapping: &loop-mapping
-        imm: bodysize
-        rs1: grs
-        funct3: b000
-        rd: bxxxxx
-        opcode: b00010
+      scheme: loop
+      mapping:
+        bodysize: bodysize
+        grs: grs
 
   - mnemonic: loopi
     synopsis: Loop Immediate
@@ -774,7 +832,7 @@ insns:
       scheme: bnaf
       mapping:
         fg: flag_group
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -809,7 +867,7 @@ insns:
       scheme: bnaf
       mapping:
         fg: flag_group
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -877,6 +935,7 @@ insns:
     encoding:
       scheme: bnam
       mapping:
+        sub: b0
         wrs2: wrs2
         wrs1: wrs1
         funct3: b101
@@ -1027,7 +1086,7 @@ insns:
       scheme: bnaf
       mapping:
         fg: flag_group
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -1053,7 +1112,7 @@ insns:
       scheme: bnaf
       mapping:
         fg: flag_group
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -1115,14 +1174,14 @@ insns:
         result = result - MOD
 
       WDR[d] = result
-    # Commented out because of encoding collisions (see issue 2391)
-    # encoding:
-    #   scheme: bnam
-    #   mapping:
-    #     wrs2: wrs2
-    #     wrs1: wrs1
-    #     funct3: b110
-    #     wrd: wrd
+    encoding:
+      scheme: bnam
+      mapping:
+        sub: b1
+        wrs2: wrs2
+        wrs1: wrs1
+        funct3: b101
+        wrd: wrd
 
   - mnemonic: bn.and
     group: bignum
@@ -1155,10 +1214,10 @@ insns:
 
       WDR[d] = result
     encoding:
-      scheme: bnaf
+      scheme: bna
       mapping:
-        fg: b0
-        st: shift_type
+        funct31: b0
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -1181,10 +1240,10 @@ insns:
 
       WDR[d] = result
     encoding:
-      scheme: bnaf
+      scheme: bna
       mapping:
-        fg: b1
-        st: shift_type
+        funct31: b1
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -1218,10 +1277,10 @@ insns:
 
       WDR[d] = result
     encoding:
-      scheme: bnaf
+      scheme: bna
       mapping:
-        fg: b0
-        st: shift_type
+        funct31: b0
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs
         wrs1: bxxxxx
@@ -1247,7 +1306,7 @@ insns:
       scheme: bnaf
       mapping:
         fg: b1
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
@@ -1285,7 +1344,7 @@ insns:
         imm: imm
         wrs2: wrs2
         wrs1: wrs1
-        funct2: b10
+        funct2: b11
         wrd: wrd
 
   - mnemonic: bn.sel
@@ -1325,7 +1384,6 @@ insns:
       scheme: bns
       mapping:
         fg: flag_group
-        funct4: b010x
         flag: flag
         wrs2: wrs2
         wrs1: wrs1
@@ -1363,11 +1421,11 @@ insns:
       scheme: bnc
       mapping:
         fg: flag_group
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
-        funct4: b0110
+        funct3: b001
 
   - mnemonic: bn.cmpb
     group: bignum
@@ -1386,11 +1444,11 @@ insns:
       scheme: bnc
       mapping:
         fg: flag_group
-        st: shift_type
+        shift_type: shift_type
         shift_bytes: shift_bytes
         wrs2: wrs2
         wrs1: wrs1
-        funct4: b0111
+        funct3: b011
 
   - mnemonic: bn.lid
     group: bignum
@@ -1580,7 +1638,7 @@ insns:
     encoding:
       scheme: wcsr
       mapping:
-        funct4: b0111
+        write: b0
         wcsr: wsr
         wrs: wrs
         wrd: wrd
@@ -1592,7 +1650,7 @@ insns:
     encoding:
       scheme: wcsr
       mapping:
-        funct4: b1000
+        write: b1
         wcsr: wsr
         wrs: wrs
         wrd: wrd
