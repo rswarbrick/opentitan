@@ -270,7 +270,7 @@ module top_${top["name"]} #(
     .test_en_i            (1'b0),
     // static pinning
     .hart_id_i            (32'b0),
-    .boot_addr_i          (ADDR_SPACE_ROM),
+    .boot_addr_i          (ADDR_SPACE_ROM_CTRL__ROM),
     // TL-UL buses
     .tl_i_o               (main_tl_corei_req),
     .tl_i_i               (main_tl_corei_rsp),

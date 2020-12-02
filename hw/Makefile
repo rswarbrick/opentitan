@@ -31,6 +31,7 @@ IPS ?= aes           \
        pinmux        \
        pwrmgr        \
        rbox          \
+       rom_ctrl      \
        rstmgr        \
        rv_plic       \
        rv_timer      \
