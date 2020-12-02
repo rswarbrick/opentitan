@@ -8,6 +8,8 @@
 #include "verilator_memutil.h"
 #include "verilator_sim_ctrl.h"
 
+#define TOP_EARLGREY_PATH "TOP.top_earlgrey_verilator.top_earlgrey"
+
 int main(int argc, char **argv) {
   top_earlgrey_verilator top;
   VerilatorMemUtil memutil;
@@ -16,25 +18,21 @@ int main(int argc, char **argv) {
                  VerilatorSimCtrlFlags::ResetPolarityNegative);
 
   memutil.RegisterMemoryArea(
-      "rom",
-      "TOP.top_earlgrey_verilator.top_earlgrey.u_rom_rom.u_prim_rom."
-      "gen_generic.u_impl_generic");
+      "rom", (TOP_EARLGREY_PATH ".u_rom_ctrl.u_rom.u_prim_rom"
+                                ".gen_generic.u_impl_generic"));
   memutil.RegisterMemoryArea(
-      "ram",
-      "TOP.top_earlgrey_verilator.top_earlgrey.u_ram1p_ram_main."
-      "u_prim_ram_1p_adv.u_mem.gen_generic.u_impl_generic");
+      "ram", (TOP_EARLGREY_PATH ".u_ram1p_ram_main.u_prim_ram_1p_adv.u_mem"
+                                ".gen_generic.u_impl_generic"));
   memutil.RegisterMemoryArea(
       "flash",
-      ("TOP.top_earlgrey_verilator.top_earlgrey.u_flash_eflash.u_flash."
-       "gen_generic.u_impl_generic.gen_prim_flash_banks[0].u_prim_flash_bank.u_"
-       "mem.gen_"
-       "generic.u_impl_generic"),
+      (TOP_EARLGREY_PATH ".u_flash_eflash.u_flash"
+                         ".gen_generic.u_impl_generic.gen_prim_flash_banks[0]"
+                         ".u_prim_flash_bank.u_mem.gen_generic.u_impl_generic"),
       64, nullptr);
   memutil.RegisterMemoryArea(
-      "otp",
-      "TOP.top_earlgrey_verilator.top_earlgrey.u_otp_ctrl.u_otp."
-      "gen_generic.u_impl_generic.u_prim_ram_1p_adv.u_mem.gen_generic."
-      "u_impl_generic");
+      "otp", (TOP_EARLGREY_PATH
+              ".u_otp_ctrl.u_otp.gen_generic.u_impl_generic"
+              ".u_prim_ram_1p_adv.u_mem.gen_generic.u_impl_generic"));
   simctrl.RegisterExtension(&memutil);
   // The initial reset delay must be long enough such that pwr/rst/clkmgr will
   // release clocks to the entire design.  This allows for synchronous resets

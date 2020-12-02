@@ -4578,11 +4578,9 @@
         null: 0x411D0000
       }
     }
-  ]
-  memory:
-  [
     {
-      name: rom
+      name: rom_ctrl
+      type: rom_ctrl
       clock_srcs:
       {
         clk_i: main
@@ -4592,33 +4590,50 @@
       {
         rst_ni: rstmgr_aon_resets.rst_sys_n[rstmgr_pkg::Domain0Sel]
       }
-      type: rom
-      base_addr: 0x00008000
-      swaccess: ro
-      size: 0x4000
-      integ_width: 8
-      inter_signal_list:
-      [
-        {
-          struct: tl
-          package: tlul_pkg
-          type: req_rsp
-          act: rsp
-          name: tl
-          inst_name: rom
-          width: 1
-          default: ""
-          end_idx: -1
-          top_signame: rom_tl
-          index: -1
-        }
-      ]
+      base_addrs:
+      {
+        rom: 0x00008000
+        regs: 0x411e0000
+      }
       clock_connections:
       {
         clk_i: clkmgr_aon_clocks.clk_main_infra
       }
       domain: "0"
+      param_list: []
+      inter_signal_list:
+      [
+        {
+          name: regs_tl
+          struct: tl
+          package: tlul_pkg
+          type: req_rsp
+          act: rsp
+          width: 1
+          inst_name: rom_ctrl
+          default: ""
+          end_idx: -1
+          top_signame: rom_ctrl_regs_tl
+          index: -1
+        }
+        {
+          name: rom_tl
+          struct: tl
+          package: tlul_pkg
+          type: req_rsp
+          act: rsp
+          width: 1
+          inst_name: rom_ctrl
+          default: ""
+          end_idx: -1
+          top_signame: rom_ctrl_rom_tl
+          index: -1
+        }
+      ]
     }
+  ]
+  memory:
+  [
     {
       name: ram_main
       clock_srcs:
@@ -5203,9 +5218,13 @@
       [
         aon_timer_aon.aon_timer_rst_req
       ]
-      rom.tl:
+      rom_ctrl.rom_tl:
       [
-        main.tl_rom
+        main.tl_rom_ctrl__rom
+      ]
+      rom_ctrl.regs_tl:
+      [
+        main.tl_rom_ctrl__regs
       ]
       ram_main.tl:
       [
@@ -5433,14 +5452,15 @@
       {
         corei:
         [
-          rom
+          rom_ctrl.rom
           debug_mem
           ram_main
           eflash
         ]
         cored:
         [
-          rom
+          rom_ctrl.rom
+          rom_ctrl.regs
           debug_mem
           ram_main
           eflash
@@ -5460,7 +5480,8 @@
         ]
         dm_sba:
         [
-          rom
+          rom_ctrl.rom
+          rom_ctrl.regs
           ram_main
           eflash
           peri
@@ -5513,17 +5534,35 @@
           pipeline: "true"
         }
         {
-          name: rom
+          name: rom_ctrl.rom
           type: device
           clock: clk_main_i
           reset: rst_main_ni
           pipeline: "false"
-          inst_type: rom
+          inst_type: rom_ctrl
           addr_range:
           [
             {
               base_addr: 0x8000
               size_byte: 0x4000
+            }
+          ]
+          xbar: false
+          stub: false
+          pipeline_byp: "true"
+        }
+        {
+          name: rom_ctrl.regs
+          type: device
+          clock: clk_main_i
+          reset: rst_main_ni
+          pipeline: "false"
+          inst_type: rom_ctrl
+          addr_range:
+          [
+            {
+              base_addr: 0x411e0000
+              size_byte: 0x1000
             }
           ]
           xbar: false
@@ -5859,7 +5898,7 @@
           index: -1
         }
         {
-          name: tl_rom
+          name: tl_rom_ctrl__rom
           struct: tl
           package: tlul_pkg
           type: req_rsp
@@ -5867,7 +5906,19 @@
           width: 1
           inst_name: main
           default: ""
-          top_signame: rom_tl
+          top_signame: rom_ctrl_rom_tl
+          index: -1
+        }
+        {
+          name: tl_rom_ctrl__regs
+          struct: tl
+          package: tlul_pkg
+          type: req_rsp
+          act: req
+          width: 1
+          inst_name: main
+          default: ""
+          top_signame: rom_ctrl_regs_tl
           index: -1
         }
         {
@@ -8377,6 +8428,7 @@
     edn1
     sram_ctrl_main
     otbn
+    rom_ctrl
   ]
   alert:
   [
@@ -8582,6 +8634,13 @@
       type: alert
       async: "1"
       module_name: otbn
+    }
+    {
+      name: rom_ctrl_fatal
+      width: 1
+      type: alert
+      async: "1"
+      module_name: rom_ctrl
     }
   ]
   exported_rsts:
@@ -11193,16 +11252,29 @@
         index: -1
       }
       {
+        name: regs_tl
         struct: tl
         package: tlul_pkg
         type: req_rsp
         act: rsp
-        name: tl
-        inst_name: rom
         width: 1
+        inst_name: rom_ctrl
         default: ""
         end_idx: -1
-        top_signame: rom_tl
+        top_signame: rom_ctrl_regs_tl
+        index: -1
+      }
+      {
+        name: rom_tl
+        struct: tl
+        package: tlul_pkg
+        type: req_rsp
+        act: rsp
+        width: 1
+        inst_name: rom_ctrl
+        default: ""
+        end_idx: -1
+        top_signame: rom_ctrl_rom_tl
         index: -1
       }
       {
@@ -11446,7 +11518,7 @@
         index: -1
       }
       {
-        name: tl_rom
+        name: tl_rom_ctrl__rom
         struct: tl
         package: tlul_pkg
         type: req_rsp
@@ -11454,7 +11526,19 @@
         width: 1
         inst_name: main
         default: ""
-        top_signame: rom_tl
+        top_signame: rom_ctrl_rom_tl
+        index: -1
+      }
+      {
+        name: tl_rom_ctrl__regs
+        struct: tl
+        package: tlul_pkg
+        type: req_rsp
+        act: req
+        width: 1
+        inst_name: main
+        default: ""
+        top_signame: rom_ctrl_regs_tl
         index: -1
       }
       {
@@ -13202,7 +13286,7 @@
       {
         package: tlul_pkg
         struct: tl_h2d
-        signame: rom_tl_req
+        signame: rom_ctrl_rom_tl_req
         width: 1
         type: req_rsp
         end_idx: -1
@@ -13213,7 +13297,29 @@
       {
         package: tlul_pkg
         struct: tl_d2h
-        signame: rom_tl_rsp
+        signame: rom_ctrl_rom_tl_rsp
+        width: 1
+        type: req_rsp
+        end_idx: -1
+        act: rsp
+        suffix: rsp
+        default: ""
+      }
+      {
+        package: tlul_pkg
+        struct: tl_h2d
+        signame: rom_ctrl_regs_tl_req
+        width: 1
+        type: req_rsp
+        end_idx: -1
+        act: rsp
+        suffix: req
+        default: ""
+      }
+      {
+        package: tlul_pkg
+        struct: tl_d2h
+        signame: rom_ctrl_regs_tl_rsp
         width: 1
         type: req_rsp
         end_idx: -1

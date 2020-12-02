@@ -548,30 +548,18 @@
       reset_connections: {rst_ni: "sys", rst_edn_ni: "sys"},
       base_addr: "0x411D0000",
     },
+    { name: "rom_ctrl",
+      type: "rom_ctrl",
+      clock_srcs: {clk_i: "main"},
+      clock_group: "infra",
+      reset_connections: {rst_ni: "sys"},
+      base_addrs: {rom: "0x00008000", regs: "0x411e0000"}
+    }
   ]
 
   // Memories (ROM, RAM, eFlash) are defined at the top.
   // It utilizes the primitive cells but configurable
   memory: [
-    { name: "rom",
-      clock_srcs: {clk_i: "main"},
-      clock_group: "infra",
-      reset_connections: {rst_ni: "sys"},
-      type: "rom",
-      base_addr: "0x00008000",
-      swaccess: "ro",
-      size: "0x4000",
-      // data integrity width
-      integ_width: 8,
-      inter_signal_list: [
-        { struct: "tl"
-          package: "tlul_pkg"
-          type: "req_rsp"
-          act: "rsp"
-          name: "tl"
-        }
-      ]
-    },
     { name: "ram_main",
       clock_srcs: {clk_i: "main"},
       clock_group: "infra",

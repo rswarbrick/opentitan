@@ -238,6 +238,7 @@ module top_earlgrey #(
   // edn1
   // sram_ctrl_main
   // otbn
+  // rom_ctrl
 
 
   logic [170:0]  intr_vector;
@@ -479,8 +480,10 @@ module top_earlgrey #(
   lc_ctrl_pkg::lc_tx_t       lc_ctrl_lc_seed_hw_rd_en;
   logic [2:0] pwrmgr_aon_wakeups;
   logic       pwrmgr_aon_rstreqs;
-  tlul_pkg::tl_h2d_t       rom_tl_req;
-  tlul_pkg::tl_d2h_t       rom_tl_rsp;
+  tlul_pkg::tl_h2d_t       rom_ctrl_rom_tl_req;
+  tlul_pkg::tl_d2h_t       rom_ctrl_rom_tl_rsp;
+  tlul_pkg::tl_h2d_t       rom_ctrl_regs_tl_req;
+  tlul_pkg::tl_d2h_t       rom_ctrl_regs_tl_rsp;
   tlul_pkg::tl_h2d_t       ram_main_tl_req;
   tlul_pkg::tl_d2h_t       ram_main_tl_rsp;
   tlul_pkg::tl_h2d_t       eflash_tl_req;
@@ -722,53 +725,6 @@ module top_earlgrey #(
 
   assign rstmgr_aon_cpu.ndmreset_req = ndmreset_req;
   assign rstmgr_aon_cpu.rst_cpu_n = rstmgr_aon_resets.rst_sys_n[rstmgr_pkg::Domain0Sel];
-
-  // ROM device
-  logic        rom_req;
-  logic [11:0] rom_addr;
-  logic [39:0] rom_rdata;
-  logic        rom_rvalid;
-
-  tlul_adapter_sram #(
-    .SramAw(12),
-    .SramDw(32),
-    .Outstanding(2),
-    .ErrOnWrite(1),
-    .CmdIntgCheck(1),
-    .EnableRspIntgGen(1),
-    .EnableDataIntgGen(1) // TODO: Needs to be updated for intgerity passthrough
-  ) u_tl_adapter_rom (
-    .clk_i   (clkmgr_aon_clocks.clk_main_infra),
-    .rst_ni   (rstmgr_aon_resets.rst_sys_n[rstmgr_pkg::Domain0Sel]),
-
-    .tl_i        (rom_tl_req),
-    .tl_o        (rom_tl_rsp),
-    .en_ifetch_i (tlul_pkg::InstrEn),
-    .req_o       (rom_req),
-    .gnt_i       (1'b1), // Always grant as only one requester exists
-    .we_o        (),
-    .addr_o      (rom_addr),
-    .wdata_o     (),
-    .wmask_o     (),
-    .intg_error_o(), // Connect to ROM checker and ROM scramble later
-    .rdata_i     (rom_rdata[31:0]),
-    .rvalid_i    (rom_rvalid),
-    .rerror_i    (2'b00)
-  );
-
-  prim_rom_adv #(
-    .Width(40),
-    .Depth(4096),
-    .MemInitFile(BootRomInitFile)
-  ) u_rom_rom (
-    .clk_i   (clkmgr_aon_clocks.clk_main_infra),
-    .rst_ni   (rstmgr_aon_resets.rst_sys_n[rstmgr_pkg::Domain0Sel]),
-    .req_i    (rom_req),
-    .addr_i   (rom_addr),
-    .rdata_o  (rom_rdata),
-    .rvalid_o (rom_rvalid),
-    .cfg_i    ('0) // tied off for now
-  );
 
   // sram device
   logic        ram_main_req;
@@ -2111,6 +2067,23 @@ module top_earlgrey #(
       .rst_edn_ni (rstmgr_aon_resets.rst_sys_n[rstmgr_pkg::Domain0Sel])
   );
 
+  rom_ctrl u_rom_ctrl (
+
+      // [29]: fatal
+      .alert_tx_o  ( alert_tx[29:29] ),
+      .alert_rx_i  ( alert_rx[29:29] ),
+
+      // Inter-module signals
+      .regs_tl_i(rom_ctrl_regs_tl_req),
+      .regs_tl_o(rom_ctrl_regs_tl_rsp),
+      .rom_tl_i(rom_ctrl_rom_tl_req),
+      .rom_tl_o(rom_ctrl_rom_tl_rsp),
+
+      // Clock and reset connections
+      .clk_i (clkmgr_aon_clocks.clk_main_infra),
+      .rst_ni (rstmgr_aon_resets.rst_sys_n[rstmgr_pkg::Domain0Sel])
+  );
+
   // interrupt assignments
   assign intr_vector = {
       intr_entropy_src_es_fatal_err, // ID 139
@@ -2274,9 +2247,13 @@ module top_earlgrey #(
     .tl_dm_sba_i(main_tl_dm_sba_req),
     .tl_dm_sba_o(main_tl_dm_sba_rsp),
 
-    // port: tl_rom
-    .tl_rom_o(rom_tl_req),
-    .tl_rom_i(rom_tl_rsp),
+    // port: tl_rom_ctrl__rom
+    .tl_rom_ctrl__rom_o(rom_ctrl_rom_tl_req),
+    .tl_rom_ctrl__rom_i(rom_ctrl_rom_tl_rsp),
+
+    // port: tl_rom_ctrl__regs
+    .tl_rom_ctrl__regs_o(rom_ctrl_regs_tl_req),
+    .tl_rom_ctrl__regs_i(rom_ctrl_regs_tl_rsp),
 
     // port: tl_debug_mem
     .tl_debug_mem_o(main_tl_debug_mem_req),
