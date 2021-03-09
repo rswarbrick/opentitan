@@ -7792,228 +7792,6 @@
       module_name: entropy_src
     }
   ]
-  alert_module:
-  [
-    aes
-    otbn
-    sensor_ctrl_aon
-    keymgr
-    otp_ctrl
-    lc_ctrl
-    entropy_src
-    csrng
-    edn0
-    edn1
-    sram_ctrl_main
-    sram_ctrl_ret_aon
-    flash_ctrl
-  ]
-  alert:
-  [
-    {
-      name: aes_recov_ctrl_update_err
-      width: 1
-      type: alert
-      async: "1"
-      module_name: aes
-    }
-    {
-      name: aes_fatal_fault
-      width: 1
-      type: alert
-      async: "1"
-      module_name: aes
-    }
-    {
-      name: otbn_fatal
-      width: 1
-      type: alert
-      async: "1"
-      module_name: otbn
-    }
-    {
-      name: otbn_recov
-      width: 1
-      type: alert
-      async: "1"
-      module_name: otbn
-    }
-    {
-      name: sensor_ctrl_aon_recov_as
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: sensor_ctrl_aon_recov_cg
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: sensor_ctrl_aon_recov_gd
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: sensor_ctrl_aon_recov_ts_hi
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: sensor_ctrl_aon_recov_ts_lo
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: sensor_ctrl_aon_recov_ls
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: sensor_ctrl_aon_recov_ot
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sensor_ctrl_aon
-    }
-    {
-      name: keymgr_fatal_fault_err
-      width: 1
-      type: alert
-      async: "1"
-      module_name: keymgr
-    }
-    {
-      name: keymgr_recov_operation_err
-      width: 1
-      type: alert
-      async: "1"
-      module_name: keymgr
-    }
-    {
-      name: otp_ctrl_fatal_macro_error
-      width: 1
-      type: alert
-      async: "0"
-      module_name: otp_ctrl
-    }
-    {
-      name: otp_ctrl_fatal_check_error
-      width: 1
-      type: alert
-      async: "0"
-      module_name: otp_ctrl
-    }
-    {
-      name: lc_ctrl_fatal_prog_error
-      width: 1
-      type: alert
-      async: "0"
-      module_name: lc_ctrl
-    }
-    {
-      name: lc_ctrl_fatal_state_error
-      width: 1
-      type: alert
-      async: "0"
-      module_name: lc_ctrl
-    }
-    {
-      name: entropy_src_recov_alert
-      width: 1
-      type: alert
-      async: "1"
-      module_name: entropy_src
-    }
-    {
-      name: entropy_src_fatal_alert
-      width: 1
-      type: alert
-      async: "1"
-      module_name: entropy_src
-    }
-    {
-      name: csrng_fatal_alert
-      width: 1
-      type: alert
-      async: "1"
-      module_name: csrng
-    }
-    {
-      name: edn0_fatal_alert
-      width: 1
-      type: alert
-      async: "1"
-      module_name: edn0
-    }
-    {
-      name: edn1_fatal_alert
-      width: 1
-      type: alert
-      async: "1"
-      module_name: edn1
-    }
-    {
-      name: sram_ctrl_main_fatal_intg_error
-      width: 1
-      type: alert
-      async: "1"
-      module_name: sram_ctrl_main
-    }
-    {
-      name: sram_ctrl_main_fatal_parity_error
-      width: 1
-      type: alert
-      async: "1"
-      module_name: sram_ctrl_main
-    }
-    {
-      name: sram_ctrl_ret_aon_fatal_intg_error
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sram_ctrl_ret_aon
-    }
-    {
-      name: sram_ctrl_ret_aon_fatal_parity_error
-      width: 1
-      type: alert
-      async: "0"
-      module_name: sram_ctrl_ret_aon
-    }
-    {
-      name: flash_ctrl_recov_err
-      width: 1
-      type: alert
-      async: "1"
-      module_name: flash_ctrl
-    }
-    {
-      name: flash_ctrl_recov_mp_err
-      width: 1
-      type: alert
-      async: "1"
-      module_name: flash_ctrl
-    }
-    {
-      name: flash_ctrl_recov_ecc_err
-      width: 1
-      type: alert
-      async: "1"
-      module_name: flash_ctrl
-    }
-  ]
   pinmux:
   {
     num_mio: 44
@@ -8582,6 +8360,228 @@
       name: aon_timer_rst_req
       width: "1"
       module: aon_timer_aon
+    }
+  ]
+  alert_module:
+  [
+    otp_ctrl
+    lc_ctrl
+    sensor_ctrl_aon
+    sram_ctrl_ret_aon
+    flash_ctrl
+    aes
+    keymgr
+    csrng
+    entropy_src
+    edn0
+    edn1
+    sram_ctrl_main
+    otbn
+  ]
+  alert:
+  [
+    {
+      name: otp_ctrl_fatal_macro_error
+      width: 1
+      type: alert
+      async: "0"
+      module_name: otp_ctrl
+    }
+    {
+      name: otp_ctrl_fatal_check_error
+      width: 1
+      type: alert
+      async: "0"
+      module_name: otp_ctrl
+    }
+    {
+      name: lc_ctrl_fatal_prog_error
+      width: 1
+      type: alert
+      async: "0"
+      module_name: lc_ctrl
+    }
+    {
+      name: lc_ctrl_fatal_state_error
+      width: 1
+      type: alert
+      async: "0"
+      module_name: lc_ctrl
+    }
+    {
+      name: sensor_ctrl_aon_recov_as
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sensor_ctrl_aon_recov_cg
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sensor_ctrl_aon_recov_gd
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sensor_ctrl_aon_recov_ts_hi
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sensor_ctrl_aon_recov_ts_lo
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sensor_ctrl_aon_recov_ls
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sensor_ctrl_aon_recov_ot
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sensor_ctrl_aon
+    }
+    {
+      name: sram_ctrl_ret_aon_fatal_intg_error
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sram_ctrl_ret_aon
+    }
+    {
+      name: sram_ctrl_ret_aon_fatal_parity_error
+      width: 1
+      type: alert
+      async: "0"
+      module_name: sram_ctrl_ret_aon
+    }
+    {
+      name: flash_ctrl_recov_err
+      width: 1
+      type: alert
+      async: "1"
+      module_name: flash_ctrl
+    }
+    {
+      name: flash_ctrl_recov_mp_err
+      width: 1
+      type: alert
+      async: "1"
+      module_name: flash_ctrl
+    }
+    {
+      name: flash_ctrl_recov_ecc_err
+      width: 1
+      type: alert
+      async: "1"
+      module_name: flash_ctrl
+    }
+    {
+      name: aes_recov_ctrl_update_err
+      width: 1
+      type: alert
+      async: "1"
+      module_name: aes
+    }
+    {
+      name: aes_fatal_fault
+      width: 1
+      type: alert
+      async: "1"
+      module_name: aes
+    }
+    {
+      name: keymgr_fatal_fault_err
+      width: 1
+      type: alert
+      async: "1"
+      module_name: keymgr
+    }
+    {
+      name: keymgr_recov_operation_err
+      width: 1
+      type: alert
+      async: "1"
+      module_name: keymgr
+    }
+    {
+      name: csrng_fatal_alert
+      width: 1
+      type: alert
+      async: "1"
+      module_name: csrng
+    }
+    {
+      name: entropy_src_recov_alert
+      width: 1
+      type: alert
+      async: "1"
+      module_name: entropy_src
+    }
+    {
+      name: entropy_src_fatal_alert
+      width: 1
+      type: alert
+      async: "1"
+      module_name: entropy_src
+    }
+    {
+      name: edn0_fatal_alert
+      width: 1
+      type: alert
+      async: "1"
+      module_name: edn0
+    }
+    {
+      name: edn1_fatal_alert
+      width: 1
+      type: alert
+      async: "1"
+      module_name: edn1
+    }
+    {
+      name: sram_ctrl_main_fatal_intg_error
+      width: 1
+      type: alert
+      async: "1"
+      module_name: sram_ctrl_main
+    }
+    {
+      name: sram_ctrl_main_fatal_parity_error
+      width: 1
+      type: alert
+      async: "1"
+      module_name: sram_ctrl_main
+    }
+    {
+      name: otbn_fatal
+      width: 1
+      type: alert
+      async: "1"
+      module_name: otbn
+    }
+    {
+      name: otbn_recov
+      width: 1
+      type: alert
+      async: "1"
+      module_name: otbn
     }
   ]
   exported_rsts:

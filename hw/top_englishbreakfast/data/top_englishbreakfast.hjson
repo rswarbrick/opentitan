@@ -687,14 +687,6 @@
   ]
 
   // ===== ALERT HANDLER ======================================================
-  // list all modules that expose alerts
-  // first item goes to LSB of the alert source
-  alert_module: [ "aes", "sensor_ctrl_aon", "lc_ctrl",
-                  "sram_ctrl_main", "sram_ctrl_ret_aon", "flash_ctrl"]
-
-  // generated list of alerts:
-  alert: [
-  ]
 
   // TODO: need to overhaul this datastructure.
   pinmux: {
