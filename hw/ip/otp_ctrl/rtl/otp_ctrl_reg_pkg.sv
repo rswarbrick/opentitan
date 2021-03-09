@@ -364,9 +364,9 @@ package otp_ctrl_reg_pkg;
 
   // Window parameters
   parameter logic [BlockAw-1:0] OTP_CTRL_SW_CFG_WINDOW_OFFSET = 14'h 1000;
-  parameter logic [BlockAw-1:0] OTP_CTRL_SW_CFG_WINDOW_SIZE   = 14'h 800;
+  parameter int unsigned        OTP_CTRL_SW_CFG_WINDOW_SIZE   = 'h 800;
   parameter logic [BlockAw-1:0] OTP_CTRL_TEST_ACCESS_OFFSET = 14'h 2000;
-  parameter logic [BlockAw-1:0] OTP_CTRL_TEST_ACCESS_SIZE   = 14'h 40;
+  parameter int unsigned        OTP_CTRL_TEST_ACCESS_SIZE   = 'h 40;
 
   // Register index
   typedef enum int {

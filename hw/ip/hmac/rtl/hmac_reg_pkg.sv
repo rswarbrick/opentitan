@@ -242,7 +242,7 @@ package hmac_reg_pkg;
 
   // Window parameters
   parameter logic [BlockAw-1:0] HMAC_MSG_FIFO_OFFSET = 12'h 800;
-  parameter logic [BlockAw-1:0] HMAC_MSG_FIFO_SIZE   = 12'h 800;
+  parameter int unsigned        HMAC_MSG_FIFO_SIZE   = 'h 800;
 
   // Register index
   typedef enum int {

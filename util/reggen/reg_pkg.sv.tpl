@@ -260,10 +260,18 @@ value = "{}'h {:x}".format(aw, r.offset)
 <%
     win_pfx = '{}_{}'.format(ublock, w.name.upper())
     base_txt_val = "{}'h {:x}".format(aw, w.offset)
-    size_txt_val = "{}'h {:x}".format(aw, w.size_in_bytes)
+    size_txt_val = "'h {:x}".format(w.size_in_bytes)
+
+    offset_type = 'logic [{}-1:0]'.format(aw_name)
+    size_type = 'int unsigned'
+    max_type_len = max(len(offset_type), len(size_type))
+
+    offset_type += ' ' * (max_type_len - len(offset_type))
+    size_type += ' ' * (max_type_len - len(size_type))
+
 %>\
-  parameter logic [${aw_name}-1:0] ${win_pfx}_OFFSET = ${base_txt_val};
-  parameter logic [${aw_name}-1:0] ${win_pfx}_SIZE   = ${size_txt_val};
+  parameter ${offset_type} ${win_pfx}_OFFSET = ${base_txt_val};
+  parameter ${size_type} ${win_pfx}_SIZE   = ${size_txt_val};
 % endfor
 % endif
 </%def>\
