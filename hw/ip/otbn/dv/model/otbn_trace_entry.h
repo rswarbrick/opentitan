@@ -81,7 +81,12 @@ class OtbnTraceEntry {
   bool is_final() const;
 
  protected:
-  static bool check_entries_compatible(
+  // Return true if the writes in rtl_lines are compatible with those in
+  // iss_lines.
+  //
+  // If they are not compatible, return false and write a description of
+  // the mismatch to *err_desc.
+  static bool check_writes_compatible(
       trace_type_t type, const std::string &key,
       const std::vector<OtbnTraceBodyLine> &rtl_lines,
       const std::vector<OtbnTraceBodyLine> &iss_lines,
