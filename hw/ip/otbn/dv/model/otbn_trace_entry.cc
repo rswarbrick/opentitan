@@ -88,19 +88,19 @@ bool OtbnTraceEntry::from_rtl_trace(const std::string &trace) {
   return true;
 }
 
-bool OtbnTraceEntry::compare_rtl_iss_entries(const OtbnTraceEntry &other,
-                                             bool no_sec_wipe_data_chk,
-                                             std::string *err_desc) const {
+bool OtbnTraceEntry::compare_with_iss_entry(const OtbnTraceEntry &iss_entry,
+                                            bool no_sec_wipe_data_chk,
+                                            std::string *err_desc) const {
   assert(err_desc);
 
-  if (hdr_ != other.hdr_) {
+  if (hdr_ != iss_entry.hdr_) {
     *err_desc = "Headers don't match.";
     return false;
   }
 
   for (const auto &rtlptr : writes_) {
-    auto isskey = other.writes_.find(rtlptr.first);
-    if (isskey == other.writes_.end()) {
+    auto isskey = iss_entry.writes_.find(rtlptr.first);
+    if (isskey == iss_entry.writes_.end()) {
       std::ostringstream oss;
       oss << "RTL had a write to `" << rtlptr.first
           << "', but the ISS doesn't have a write to that location.";
@@ -114,10 +114,10 @@ bool OtbnTraceEntry::compare_rtl_iss_entries(const OtbnTraceEntry &other,
       return false;
   }
 
-  if (writes_.size() != other.writes_.size()) {
+  if (writes_.size() != iss_entry.writes_.size()) {
     std::ostringstream oss;
     oss << "RTL wrote to " << writes_.size() << " locations; the ISS wrote to "
-        << other.writes_.size() << ".";
+        << iss_entry.writes_.size() << ".";
     *err_desc = oss.str();
     return false;
   }

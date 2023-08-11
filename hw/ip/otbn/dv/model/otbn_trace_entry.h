@@ -54,9 +54,15 @@ class OtbnTraceEntry {
   // message to stderr and return false.
   bool from_rtl_trace(const std::string &trace);
 
-  bool compare_rtl_iss_entries(const OtbnTraceEntry &other,
-                               bool no_sec_wipe_data_chk,
-                               std::string *err_desc) const;
+  // Compare this trace entry with another one. We expect this entry
+  // to be from the RTL and the other one to be from the ISS.
+  //
+  // Returns true if the two entries are compatible. If they are not,
+  // it returns false and writes a textual description of what is
+  // wrong to err_desc.
+  bool compare_with_iss_entry(const OtbnTraceEntry &iss_entry,
+                              bool no_sec_wipe_data_chk,
+                              std::string *err_desc) const;
 
   void print(const std::string &indent, std::ostream &os) const;
 
