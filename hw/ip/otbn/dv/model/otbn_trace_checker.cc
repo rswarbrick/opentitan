@@ -48,7 +48,7 @@ void OtbnTraceChecker::AcceptTraceString(const std::string &trace,
     return;
 
   done_ = false;
-  OtbnTraceEntry trace_entry;
+  OtbnRtlTraceEntry trace_entry;
   if (!trace_entry.from_rtl_trace(trace)) {
     seen_err_ = true;
     return;

@@ -89,7 +89,7 @@ class OtbnTraceChecker : public OtbnTraceListener {
 
   bool rtl_started_;
   bool rtl_pending_;
-  OtbnTraceEntry rtl_entry_;
+  OtbnRtlTraceEntry rtl_entry_;
 
   bool iss_started_;
   bool iss_pending_;

@@ -51,20 +51,6 @@ class OtbnTraceEntry {
 
   virtual ~OtbnTraceEntry(){};
 
-  // Parse a trace entry from the RTL into this object. On an error, print a
-  // message to stderr and return false.
-  bool from_rtl_trace(const std::string &trace);
-
-  // Compare this trace entry with another one. We expect this entry
-  // to be from the RTL and the other one to be from the ISS.
-  //
-  // Returns true if the two entries are compatible. If they are not,
-  // it returns false and writes a textual description of what is
-  // wrong to err_desc.
-  bool compare_with_iss_entry(const OtbnTraceEntry &iss_entry,
-                              bool no_sec_wipe_data_chk,
-                              std::string *err_desc) const;
-
   void print(const std::string &indent, std::ostream &os) const;
 
   void take_writes(const OtbnTraceEntry &other, bool other_first);
@@ -80,6 +66,16 @@ class OtbnTraceEntry {
 
   // True if this entry is "final" (Exec or WipeComplete)
   bool is_final() const;
+
+  const std::string &get_hdr() const;
+
+  // Return a pointer to a vector of writes to the given location, or
+  // null if there are none.
+  const std::vector<OtbnTraceBodyLine> *get_writes(const std::string &location) const;
+
+  // Return the number of locations that get written by one or more
+  // trace lines in this entry
+  unsigned num_locations() const;
 
  protected:
   // Return true if the writes in rtl_lines are compatible with those in
@@ -112,6 +108,22 @@ class OtbnIssTraceEntry : public OtbnTraceEntry {
   };
 
   IssData data_;
+};
+
+class OtbnRtlTraceEntry : public OtbnTraceEntry {
+ public:
+  // Parse a trace entry from the RTL into this object. On an error, print a
+  // message to stderr and return false.
+  bool from_rtl_trace(const std::string &trace);
+
+  // Compare this trace entry with one from the ISS.
+  //
+  // Returns true if the two entries are compatible. If they are not,
+  // it returns false and writes a textual description of what is
+  // wrong to err_desc.
+  bool compare_with_iss_entry(const OtbnIssTraceEntry &iss_entry,
+                              bool no_sec_wipe_data_chk,
+                              std::string *err_desc) const;
 };
 
 #endif  // OPENTITAN_HW_IP_OTBN_DV_MODEL_OTBN_TRACE_ENTRY_H_

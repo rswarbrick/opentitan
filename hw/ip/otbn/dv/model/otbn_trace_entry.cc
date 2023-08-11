@@ -63,86 +63,6 @@ bool OtbnTraceBodyLine::operator==(const OtbnTraceBodyLine &other) const {
   return true;
 }
 
-bool OtbnTraceEntry::from_rtl_trace(const std::string &trace) {
-  size_t eol = trace.find('\n');
-  hdr_ = trace.substr(0, eol);
-  trace_type_ = hdr_to_trace_type(hdr_);
-
-  while (eol != std::string::npos) {
-    size_t bol = eol + 1;
-    eol = trace.find('\n', bol);
-    size_t line_len =
-        (eol == std::string::npos) ? std::string::npos : eol - bol;
-    std::string line = trace.substr(bol, line_len);
-
-    // We're only interested in register writes
-    if (!(line.size() > 0 && line[0] == '>'))
-      continue;
-
-    OtbnTraceBodyLine parsed_line;
-    if (!parsed_line.fill_from_string("RTL", line)) {
-      return false;
-    }
-    writes_[parsed_line.get_loc()].push_back(parsed_line);
-  }
-  return true;
-}
-
-bool OtbnTraceEntry::compare_with_iss_entry(const OtbnTraceEntry &iss_entry,
-                                            bool no_sec_wipe_data_chk,
-                                            std::string *err_desc) const {
-  assert(err_desc);
-
-  if (hdr_ != iss_entry.hdr_) {
-    *err_desc = "Headers don't match.";
-    return false;
-  }
-
-  // Iterate over the lines in this entry. These are stored in a map
-  // from location (usually a register name) to a vector of write
-  // lines. The writes are applied in order, and the last one should
-  // win.
-  for (const auto &rtl_pair : writes_) {
-    const std::string &location = rtl_pair.first;
-    const std::vector<OtbnTraceBodyLine> &rtl_writes = rtl_pair.second;
-
-    // Try to find an ISS write to the same location
-    auto iss_iterator = iss_entry.writes_.find(rtl_pair.first);
-    if (iss_iterator == iss_entry.writes_.end()) {
-      std::ostringstream oss;
-      oss << "RTL had a write to `" << location << "'; the ISS did not.";
-      *err_desc = oss.str();
-      return false;
-    }
-
-    const std::vector<OtbnTraceBodyLine> &iss_writes = iss_iterator->second;
-
-    // We have writes from RTL and ISS to a matching location. Make
-    // sure they are compatible.
-    if (!check_writes_compatible(trace_type_, location, rtl_writes, iss_writes,
-                                 no_sec_wipe_data_chk, err_desc))
-      return false;
-  }
-
-  // We want to check that the two maps are compatible. That's true if
-  // every entry in one side has a matching entry on the other.
-  //
-  // At this point, we've checked that every RTL entry has a matching
-  // ISS entry. The other way around is simple: the only way it can be
-  // false is if the ISS side has some extra entries. But then the
-  // maps would be of a different size, so we can check for that
-  // easily.
-  if (writes_.size() != iss_entry.writes_.size()) {
-    std::ostringstream oss;
-    oss << "RTL wrote to " << writes_.size() << " locations; the ISS wrote to "
-        << iss_entry.writes_.size() << ".";
-    *err_desc = oss.str();
-    return false;
-  }
-
-  return true;
-}
-
 void OtbnTraceEntry::print(const std::string &indent, std::ostream &os) const {
   os << indent << hdr_ << "\n";
   for (const auto &pr : writes_) {
@@ -236,6 +156,21 @@ bool OtbnTraceEntry::is_partial() const {
 bool OtbnTraceEntry::is_final() const {
   return ((trace_type_ == OtbnTraceEntry::Exec) ||
           (trace_type_ == OtbnTraceEntry::WipeComplete));
+}
+
+const std::string &OtbnTraceEntry::get_hdr() const {
+  return hdr_;
+}
+
+const std::vector<OtbnTraceBodyLine> *OtbnTraceEntry::get_writes(const std::string &location) const
+{
+  auto it = writes_.find(location);
+  return (it == writes_.end()) ? nullptr : &it->second;
+}
+
+unsigned OtbnTraceEntry::num_locations() const
+{
+  return writes_.size();
 }
 
 bool OtbnTraceEntry::check_writes_compatible(
@@ -351,6 +286,84 @@ bool OtbnIssTraceEntry::from_iss_trace(const std::vector<std::string> &lines) {
   if (state == 1) {
     std::cerr << "No 'special' line for ISS trace with header `" << hdr_
               << "'.\n";
+    return false;
+  }
+
+  return true;
+}
+
+bool OtbnRtlTraceEntry::from_rtl_trace(const std::string &trace) {
+  size_t eol = trace.find('\n');
+  hdr_ = trace.substr(0, eol);
+  trace_type_ = hdr_to_trace_type(hdr_);
+
+  while (eol != std::string::npos) {
+    size_t bol = eol + 1;
+    eol = trace.find('\n', bol);
+    size_t line_len =
+        (eol == std::string::npos) ? std::string::npos : eol - bol;
+    std::string line = trace.substr(bol, line_len);
+
+    // We're only interested in register writes
+    if (!(line.size() > 0 && line[0] == '>'))
+      continue;
+
+    OtbnTraceBodyLine parsed_line;
+    if (!parsed_line.fill_from_string("RTL", line)) {
+      return false;
+    }
+    writes_[parsed_line.get_loc()].push_back(parsed_line);
+  }
+  return true;
+}
+
+bool OtbnRtlTraceEntry::compare_with_iss_entry(const OtbnIssTraceEntry &iss_entry,
+                                               bool no_sec_wipe_data_chk,
+                                               std::string *err_desc) const {
+  assert(err_desc);
+
+  if (hdr_ != iss_entry.get_hdr()) {
+    *err_desc = "Headers don't match.";
+    return false;
+  }
+
+  // Iterate over the lines in this entry. These are stored in a map
+  // from location (usually a register name) to a vector of write
+  // lines. The writes are applied in order, and the last one should
+  // win.
+  for (const auto &rtl_pair : writes_) {
+    const std::string &location = rtl_pair.first;
+    const std::vector<OtbnTraceBodyLine> &rtl_writes = rtl_pair.second;
+
+    // Try to find an ISS write to the same location
+    auto iss_writes_ptr = iss_entry.get_writes(location);
+    if (!iss_writes_ptr) {
+      std::ostringstream oss;
+      oss << "RTL had a write to `" << location << "'; the ISS did not.";
+      *err_desc = oss.str();
+      return false;
+    }
+
+    // We have writes from RTL and ISS to a matching location. Make
+    // sure they are compatible.
+    if (!check_writes_compatible(trace_type_, location, rtl_writes, *iss_writes_ptr,
+                                 no_sec_wipe_data_chk, err_desc))
+      return false;
+  }
+
+  // We want to check that the two maps are compatible. That's true if
+  // every entry in one side has a matching entry on the other.
+  //
+  // At this point, we've checked that every RTL entry has a matching
+  // ISS entry. The other way around is simple: the only way it can be
+  // false is if the ISS side has some extra entries. But then the
+  // maps would be of a different size, so we can check for that
+  // easily.
+  if (num_locations() != iss_entry.num_locations()) {
+    std::ostringstream oss;
+    oss << "RTL wrote to " << num_locations() << " locations; the ISS wrote to "
+        << iss_entry.num_locations() << ".";
+    *err_desc = oss.str();
     return false;
   }
 
