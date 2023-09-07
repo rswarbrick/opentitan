@@ -157,8 +157,7 @@ class OTBNSim:
             FsmState.IDLE: (self._step_idle, False),
             FsmState.PRE_EXEC: (self._step_pre_exec, False),
             FsmState.EXEC: (self._step_exec, True),
-            FsmState.WIPING_GOOD: (self._step_wiping, False),
-            FsmState.WIPING_BAD: (self._step_wiping, False),
+            FsmState.WIPING: (self._step_wiping, False),
             FsmState.LOCKED: (self._step_idle, False)
         }
 
@@ -175,14 +174,12 @@ class OTBNSim:
             self.state.ext_regs.write('INSN_CNT', 0, True)
 
         if self.state.init_sec_wipe_is_running():
-            # Wait for the URND seed. Once that appears, switch to WIPING_GOOD
-            # unless the FSM state is already LOCKED, in which case we change
-            # it to WIPING_BAD.
+            # Wait for the URND seed. Once that appears, switch to WIPING.
             if self.state.wsrs.URND.running:
                 if self.state.get_fsm_state() == FsmState.LOCKED:
-                    self.state.set_fsm_state(FsmState.WIPING_BAD)
-                else:
-                    self.state.set_fsm_state(FsmState.WIPING_GOOD)
+                    self.state.lock_after_wipe = True
+
+                self.state.set_fsm_state(FsmState.WIPING)
 
         changes = self.state.changes()
         self.state.commit(sim_stalled=True)
@@ -282,10 +279,11 @@ class OTBNSim:
             self.state.wipe_cycles -= 1
 
         # If something bad happened asynchronously (because of an escalation),
-        # we want to finish the secure wipe but accept no further commands.  To
-        # this end, turn this into a "wipe because something bad happended".
+        # we want to finish the secure wipe but accept no further commands. Set
+        # the lock_after_wipe flag to make sure we lock when the secure wipe
+        # finishes.
         if self.state.pending_halt:
-            self.state._fsm_state = FsmState.WIPING_BAD
+            self.state.lock_after_wipe = True
 
         # Reflect wiping in STATUS register if it has not been updated yet.
         if (self.state.wipe_cycles > 0 and
@@ -293,14 +291,15 @@ class OTBNSim:
              [Status.BUSY_SEC_WIPE_INT, Status.LOCKED])):
             self.state.ext_regs.write('STATUS', Status.BUSY_SEC_WIPE_INT, True)
 
-        is_good = self.state.get_fsm_state() == FsmState.WIPING_GOOD
-
         # Clear the WIPE_START register if it was set.
         if self.state.ext_regs.read('WIPE_START', True):
             self.state.ext_regs.write('WIPE_START', 0, True)
 
-        # Zero INSN_CNT once if we're in state WIPING_BAD.
-        if not is_good and self.state.ext_regs.read('INSN_CNT', True) != 0:
+        # Zero INSN_CNT if we're in the WIPING state and are going to lock. To
+        # avoid reporting a write on every cycle, we only write zero if
+        # INSN_CNT is currently nonzero.
+        if ((self.state.lock_after_wipe and
+             self.state.ext_regs.read('INSN_CNT', True) != 0)):
             if ((self.state.zero_insn_cnt_next or
                  not self.state.lock_immediately)):
                 self.state.ext_regs.write('INSN_CNT', 0, True)
@@ -321,7 +320,8 @@ class OTBNSim:
             if (not self.state.first_round_of_wipe) or self.state.rma_req:
                 # This is the second wipe round or the only round of a wipe
                 # during an RMA request, so wipe all registers and set STATUS.
-                next_status = Status.IDLE if is_good else Status.LOCKED
+                next_status = (Status.LOCKED if self.state.lock_after_wipe
+                               else Status.IDLE)
                 self.state.ext_regs.write('STATUS', next_status, True)
                 self.state.wipe()
 
@@ -338,7 +338,7 @@ class OTBNSim:
                 # This is the second wipe round or the only wipe round during
                 # an RMA request. If the wipe was good, set the next state to
                 # IDLE; otherwise set it to LOCKED.
-                if is_good:
+                if not self.state.lock_after_wipe:
                     assert not self.state.rma_req
                     next_state = FsmState.IDLE
                     if self.state.init_sec_wipe_is_running():
@@ -370,7 +370,7 @@ class OTBNSim:
         # don't want to do an FSM state change.
         cur_state = self.state.get_fsm_state()
         assert cur_state in [FsmState.MEM_SEC_WIPE,
-                             FsmState.WIPING_BAD, FsmState.LOCKED]
+                             FsmState.WIPING, FsmState.LOCKED]
         if cur_state == FsmState.MEM_SEC_WIPE:
             self.state.ext_regs.write('STATUS', Status.IDLE, True)
             self.state.set_fsm_state(FsmState.IDLE)
