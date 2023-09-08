@@ -79,21 +79,25 @@ class EdnClient:
         assert 0 <= word < (1 << 32)
 
         if self._acc is None:
+            # This happens if we started an EDN transaction and then there was
+            # a reset for our block, clearing the _acc list. The RTL
+            # implementation will just ignore the response (since it wasn't
+            # waiting for it). Do the same here.
             return
-        else:
-            assert len(self._acc) < ACC_LEN
-            assert self._cdc_counter is None
-            # Set the FIPS error for each received word.
-            self._fips_err = fips_err | self._fips_err
 
-            # If the length of accumulated words is nonzero we check for
-            # repetition between accumulated and received
-            self._rep_err = (self._last_word == word) | self._rep_err
+        assert len(self._acc) < ACC_LEN
+        assert self._cdc_counter is None
+        # Set the FIPS error for each received word.
+        self._fips_err = fips_err | self._fips_err
 
-            self._acc.append(word)
-            self._last_word = word
-            if len(self._acc) == ACC_LEN:
-                self._cdc_counter = 0
+        # If the length of accumulated words is nonzero we check for
+        # repetition between accumulated and received
+        self._rep_err = (self._last_word == word) | self._rep_err
+
+        self._acc.append(word)
+        self._last_word = word
+        if len(self._acc) == ACC_LEN:
+            self._cdc_counter = 0
 
     def edn_reset(self) -> None:
         '''Called on a reset signal on the EDN clock domain'''
