@@ -19,7 +19,7 @@ The IP block implements the following features:
 
 - Always-on: uses the always-on power and clock domain
 - EC reset pulse duration control and stretching
-- Keyboard and button combination (combo) triggered action
+- Configurable actions can be triggered by specific inputs or combinations of inputs.
 - AC_present can trigger interrupt
 - Configuration registers can be set and locked until the next chip reset
 - Pin output override
