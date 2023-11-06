@@ -9,10 +9,10 @@ The detection logic does require the signal to stay active for the entire period
 For the auto block, key interrupt and ultra-low-power features there is only a debounce timer so it is good to be aware of this behavior of sampling the signal only twice.
 
 The `sysrst_ctrl` has four input pins (`pwrb_in_i`, `key[0,1,2]_in_i`) with corresponding output pins (`pwrb_out`, `key[0,1,2]_out`).
-During normal operation the `sysrst_ctrl` will pass the pin information directly from the input pins to the output pins with optional inversion.
-Combinations of the inputs being active for a specified time can be detected and used to trigger actions.
-The override logic allows the output to be overridden (i.e. not follow the corresponding input) based either on trigger or software settings.
-This allows the security chip to take over the inputs for its own use without disturbing the main user.
+During normal operation the `sysrst_ctrl` will pass signals directly from the input pins to the output pins with optional inversion.
+However, there is an override feature, which allows an output to be given a specific value when triggered or software-controlled.
+If this happens, the output pin won't necessarily match the corresponding input.
+A final feature is that combinations of the inputs being active for a specified time can be detected and used to trigger actions.
 
 The `sysrst_ctrl` also controls two active-low open-drain I/Os named `flash_wp_l_i` / `flash_wp_l_o` and `ec_rst_l_i` / `ec_rst_l_o`.
 The `ec_rst_l_i` / `ec_rst_l_o` signals are connected to the same bidirectional pin of the OpenTitan chip, and are used to either reset the embedded controller (EC), or to detect self-reset of the EC and stretch the reset pulse (hence the bidirectional nature of this pin).
