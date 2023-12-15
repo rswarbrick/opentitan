@@ -1,0 +1,17 @@
+// Copyright lowRISC contributors.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Configuration for FPV for OTBN blocks
+{
+  flow: formal
+  sub_flow: fpv
+  name: otbn_ip_fpv
+  import_cfgs: ["{proj_root}/hw/formal/tools/dvsim/common_fpv_cfg.hjson"]
+
+  name: otbn_start_stop_fpv
+  dut: otbn_start_stop_control_tb
+  fusesoc_core: lowrisc:fpv:otbn_start_stop_control_fpv
+
+
+}

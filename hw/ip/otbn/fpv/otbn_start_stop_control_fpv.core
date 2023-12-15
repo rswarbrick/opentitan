@@ -1,0 +1,32 @@
+CAPI=2:
+# Copyright lowRISC contributors.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:fpv:otbn_start_stop_control_fpv:0.1"
+description: "otbn_start_stop_control FPV target"
+filesets:
+  files_formal:
+    depend:
+      - lowrisc:ip:otbn
+      # TODO: add more dependencies here if needed
+    files:
+      - vip/otbn_start_stop_control_assert_fpv.sv
+      - tb/otbn_start_stop_control_bind_fpv.sv
+      - tb/otbn_start_stop_control_tb.sv
+    file_type: systemVerilogSource
+
+
+targets:
+  default: &default_target
+    # note, this setting is just used
+    # to generate a file list for jg
+    default_tool: icarus
+    filesets:
+      - files_formal
+    toplevel: otbn_start_stop_control_tb
+
+  formal:
+    <<: *default_target
+
+  lint:
+    <<: *default_target
