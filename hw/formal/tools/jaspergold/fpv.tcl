@@ -200,11 +200,13 @@ set_proofgrid_per_engine_max_local_jobs 2
 get_reset_info -x_value -with_reset_pin
 
 # time limit set to 2 hours
-if {$env(TASK) ne ""} {
-  prove -task $env(TASK) -time_limit 2h
-} else {
-  prove -all -time_limit 2h
-}
+prove -all -time_limit 2h -dump_trace
+
+#if {$env(TASK) ne ""} {
+#  prove -task $env(TASK) -time_limit 2h
+#} else {
+#  
+#}
 
 report
 

@@ -451,4 +451,21 @@ module otbn_start_stop_control
                       OtbnStartStopSecureWipeComplete,
                       OtbnStartStopStateLocked})
 
+  // The rma_ack_o signal should only be sent as a (genuine) true value in response to an RMA
+  // request that's currently being asserted.
+  //
+  // THIS WAS FALSE!
+  //
+  // Problem is that we get a valid request and respond on the next cycle. But the request input
+  // gets trashed and we've changed state_q, so the transhed request input doesn't affect the ack
+  // signal any more.
+  `ASSERT(RmaAckTrueNeedsReq_A,
+          mubi4_test_true_strict(rma_ack_o) |-> mubi4_test_true_strict($past(rma_req_i)))
+
+  // The rma_ack_o output stays valid unless the rma_req_i is invalid, in which case it will become
+  // invalid on the next cycle and stay that way from then on.
+  `ASSERT(RmaAckValidUnlessBadReq_A,
+          mubi4_test_invalid(rma_ack_o) |-> (mubi4_test_invalid($past(rma_ack_o)) ||
+                                             mubi4_test_invalid($past(rma_req_i))))
+
 endmodule
