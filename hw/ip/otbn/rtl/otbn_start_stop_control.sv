@@ -451,7 +451,4 @@ module otbn_start_stop_control
                       OtbnStartStopSecureWipeComplete,
                       OtbnStartStopStateLocked})
 
-  `ASSERT(StartSecureWipeImpliesRunning_A,
-          $rose(secure_wipe_req_i) |-> (state_q == OtbnStartStopStateRunning))
-
 endmodule

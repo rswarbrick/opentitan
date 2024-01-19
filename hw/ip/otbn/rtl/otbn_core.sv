@@ -984,4 +984,10 @@ module otbn_core
           && mubi4_test_true_loose(controller_fatal_escalate_en) |=>  ##[1:100]
           u_otbn_controller.state_q == otbn_pkg::OtbnStateLocked)
 
+  // The secure_wipe_req signal is sent to the start/stop controller to tell it to switch to a
+  // secure wipe. We don't expect to do this unless we're completing running a program (either
+  // because of an ECALL or an error). Check here that we only send the request when we are indeed
+  // running.
+  `ASSERT(StartSecureWipeImpliesRunning_A,
+          $rose(secure_wipe_req) |-> u_otbn_controller.executing)
 endmodule
