@@ -410,7 +410,9 @@ package csr_utils_pkg;
       if (check == UVM_CHECK) `DV_CHECK_EQ($isunknown(field_val), 0, "", error, msg_id)
     end
 
-    // if it's field, only return field value
+    // We now have the contents of the field or register in value. If ptr was a sub-field of some
+    // register, it will be laid out in the same way as the field is laid out in the register.
+    // That's no problem: we can just extract the relevant field from the laid-out value here.
     if (csr_or_fld.field != null) value = get_field_val(csr_or_fld.field, value);
   endfunction
 
