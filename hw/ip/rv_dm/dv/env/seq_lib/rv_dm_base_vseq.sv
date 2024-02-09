@@ -148,6 +148,7 @@ class rv_dm_base_vseq extends cip_base_vseq #(
           end
           m_tl_sba_device_seq.wait_for_sequence_state(UVM_FINISHED);
         join_any
+        `uvm_info(`gfn, "DISABLE FORK HERE", UVM_LOW)
         disable fork;
       end
     join_none

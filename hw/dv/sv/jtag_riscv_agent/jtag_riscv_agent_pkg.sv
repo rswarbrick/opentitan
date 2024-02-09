@@ -132,6 +132,7 @@ package jtag_riscv_agent_pkg;
                 csr_addr, exp_data))
           end
         join_any
+        `uvm_info(`gfn, "jtag_csr_spinwait: disable fork", UVM_LOW)
         disable fork;
       end : isolation_fork
     join

@@ -218,6 +218,7 @@ package csr_utils_pkg;
                                        csr.get_full_name(), csr.get_address()))
           end
         join_any
+        `uvm_info("CUP", "DISABLE FORK HERE 1", UVM_LOW)
         disable fork;
       end : isolation_fork
     join
@@ -369,6 +370,7 @@ package csr_utils_pkg;
                            error, msg_id)
             end
             decrement_outstanding_access();
+            `uvm_info("csr_rd_sub", "Finished decrementing outstanding access", UVM_LOW)
           end
           begin
             `DV_WAIT_TIMEOUT(timeout_ns, msg_id,
@@ -376,7 +378,14 @@ package csr_utils_pkg;
                                        ptr.get_full_name(), csr_or_fld.csr.get_address()))
           end
         join_any
+        `uvm_info("CUP", "DISABLE FORK HERE 2A", UVM_LOW)
+          #1ns;
+        `uvm_info("CUP", "DISABLE FORK HERE 2B", UVM_LOW)
         disable fork;
+        `uvm_info("CUP", "Have finished disable fork A", UVM_LOW)
+          #1ns;
+
+        `uvm_info("CUP", "Have finished disable fork B", UVM_LOW)
       end : isolation_fork
     join
   endtask
@@ -572,6 +581,7 @@ package csr_utils_pkg;
                 ptr.get_full_name(), csr_or_fld.csr.get_address(), exp_data))
           end
         join_any
+        `uvm_info("CUP", "DISABLE FORK HERE 3", UVM_LOW)
         disable fork;
       end : isolation_fork
     join
@@ -627,6 +637,7 @@ package csr_utils_pkg;
                                        ptr.get_full_name(), offset))
           end
         join_any
+        `uvm_info("CUP", "DISABLE FORK HERE 4", UVM_LOW)
         disable fork;
       end : isolating_fork
     join
@@ -683,6 +694,7 @@ package csr_utils_pkg;
                                        ptr.get_full_name(), offset))
           end
         join_any
+        `uvm_info("CUP", "DISABLE FORK HERE 5", UVM_LOW)
         disable fork;
       end : isolation_fork
     join

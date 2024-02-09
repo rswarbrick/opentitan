@@ -331,6 +331,7 @@ virtual task shadow_reg_wr(dv_base_reg    csr,
             wait (exp_update_err_alert == 0);
           end
         join_any
+        `uvm_info(`gfn, "DISABLE FORK HERE", UVM_LOW)
         disable fork;
       end
     end

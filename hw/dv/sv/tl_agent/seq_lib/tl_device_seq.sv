@@ -58,6 +58,7 @@ class tl_device_seq #(type REQ = tl_seq_item) extends dv_base_seq #(
         join_any
         // Wait for all requests to be serviced.
         wait (req_q.size() == 0);
+        `uvm_info(`gfn, "DISABLE FORK HERE", UVM_LOW)
         disable fork;
       end
     join
@@ -80,6 +81,7 @@ class tl_device_seq #(type REQ = tl_seq_item) extends dv_base_seq #(
         // Allow the rest of the statements in the same time-step to finish executing in the "other"
         // thread, before disabling the fork.
         #0;
+        `uvm_info(`gfn, "DISABLE FORK HERE", UVM_LOW)
         disable fork;
       end
     join

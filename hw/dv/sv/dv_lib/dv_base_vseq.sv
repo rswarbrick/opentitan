@@ -121,14 +121,24 @@ class dv_base_vseq #(type RAL_T               = dv_base_reg_block,
   // to compute the minimal time required to keep all resets asserted.
   virtual task apply_resets_concurrently(int reset_duration_ps = 0);
 
+    `uvm_info(`gfn, "dv_base_vseq::apply_resets_concurrently() 1", UVM_LOW)
+
     // Has one or more RAL models in DUT.
     if (cfg.clk_rst_vifs.size() > 0) begin
       foreach (cfg.clk_rst_vifs[i]) begin
         cfg.clk_rst_vifs[i].drive_rst_pin(0);
         reset_duration_ps = max2(reset_duration_ps, cfg.clk_rst_vifs[i].clk_period_ps);
       end
+
+    `uvm_info(`gfn, "dv_base_vseq::apply_resets_concurrently() 3", UVM_LOW)
+
       #(reset_duration_ps * $urandom_range(2, 10) * 1ps);
+
+    `uvm_info(`gfn, "dv_base_vseq::apply_resets_concurrently() 4", UVM_LOW)
+
       foreach (cfg.clk_rst_vifs[i]) cfg.clk_rst_vifs[i].drive_rst_pin(1);
+
+    `uvm_info(`gfn, "dv_base_vseq::apply_resets_concurrently() 5", UVM_LOW)
 
     // No RAL model and only has default clk_rst_vif.
     end else begin
@@ -137,6 +147,8 @@ class dv_base_vseq #(type RAL_T               = dv_base_reg_block,
       #(reset_duration_ps * $urandom_range(2, 10) * 1ps);
       cfg.clk_rst_vif.drive_rst_pin(1);
     end
+
+    `uvm_info(`gfn, "dv_base_vseq::apply_resets_concurrently() 2", UVM_LOW)
   endtask
 
   // This is called after apply_reset in this class and after apply_resets_concurrently

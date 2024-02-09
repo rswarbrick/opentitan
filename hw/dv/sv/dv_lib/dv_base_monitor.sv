@@ -90,6 +90,7 @@ class dv_base_monitor #(type ITEM_T = uvm_sequence_item,
             end
             wait (!ok_to_end);
           join_any
+          `uvm_info(`gfn, "DISABLE FORK HERE", UVM_LOW)
           disable fork;
         end: isolation_fork
       join

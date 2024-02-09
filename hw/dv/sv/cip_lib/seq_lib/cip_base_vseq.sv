@@ -158,8 +158,13 @@ class cip_base_vseq #(
       cfg.edn_clk_rst_vif.drive_rst_pin(0);
       reset_duration_ps = max2(reset_duration_ps, cfg.edn_clk_rst_vif.clk_period_ps);
     end
+
+    `uvm_info(`gfn, "cip_base_vseq::apply_resets_concurrently() 1", UVM_LOW)
+
     super.apply_resets_concurrently(reset_duration_ps);
     if (cfg.num_edn) cfg.edn_clk_rst_vif.drive_rst_pin(1);
+
+    `uvm_info(`gfn, "cip_base_vseq::apply_resets_concurrently() 2", UVM_LOW)
   endtask
 
   // tl_access task: does a single BUS_DW-bit write or read transaction to the specified address
@@ -717,10 +722,16 @@ class cip_base_vseq #(
               ongoing_reset = 1'b1;
               `uvm_info(`gfn, $sformatf("\nReset is issued for run %0d/%0d", i, num_times), UVM_LOW)
               apply_resets_concurrently();
+
+              `uvm_info(`gfn, "Coming out of reset here", UVM_LOW)
+
               do_read_and_check_all_csrs = 1'b1;
               ongoing_reset = 1'b0;
             end
           join_any
+
+          `uvm_info(`gfn, "DISABLE FORK HERE", UVM_LOW)
+
           disable fork;
           `uvm_info(`gfn, $sformatf("\nStress w/ reset is done for run %0d/%0d", i, num_times),
                     UVM_LOW)
