@@ -154,7 +154,8 @@ class otbn_common_vseq extends otbn_base_vseq;
                               {dmem_path, ".u_rspfifo"},
                               {imem_path, ".u_sramreqfifo"},
                               {imem_path, ".u_rspfifo"}};
-      bit    touching_fifo = 1'b0;
+      bit touching_fifo = 1'b0;
+      bit touching_req_fifo = 1'b0;
 
       cfg.model_agent_cfg.vif.otbn_disable_stack_check();
 
@@ -166,6 +167,9 @@ class otbn_common_vseq extends otbn_base_vseq;
         foreach (ptr_rel_paths[j]) begin
           if (if_proxy.path == {cnt_path, ".", ptr_rel_paths[j]}) begin
             touching_fifo = 1'b1;
+            if (i == 0 || i == 2) begin
+              touching_req_fifo = 1'b1;
+            end
           end
         end
       end
@@ -176,6 +180,40 @@ class otbn_common_vseq extends otbn_base_vseq;
           $assertoff(0, "prim_fifo_sync");
         end else begin
           $asserton(0, "prim_fifo_sync");
+        end
+      end
+
+      // Disable assertions that we expect to fail if we corrupt a request FIFO. This causes a
+      // reasonable amount of chaos, because we end up with 'X values in our requests, that then
+      // travel all over the dut and are also exposed on external interfaces (TL interfaces).
+      if (touching_req_fifo) begin
+        if (!enable) begin
+          `uvm_info(`gfn, "Doing FI on a request fifo. Disabling related assertions", UVM_HIGH)
+          cfg.m_tl_agent_cfg.check_tl_errs = 1'b0;
+          $assertoff(0, "tlul_adapter_sram");
+          $assertoff(0, "prim_count");
+          $assertoff(0, "prim_alert_sender");
+          $assertoff(0, "prim_mubi4_sender");
+          $assertoff(0, "tb.dut.tlul_checker");
+          $assertoff(0, "push_pull_if");
+          $assertoff(0, "tb.dut.IdleOKnown_A");
+          $assertoff(0, "tb.dut.EdnUrndOKnown_A");
+          $assertoff(0, "tb.dut.AlertTxOKnown_A");
+          $assertoff(0, "tb.dut.ErrBitsKnown_A");
+          $assertoff(0, "tb.dut.u_otbn_core");
+        end else begin
+          $asserton(0, "tb.dut.u_otbn_core");
+          $asserton(0, "tb.dut.ErrBitsKnown_A");
+          $asserton(0, "tb.dut.AlertTxOKnown_A");
+          $asserton(0, "tb.dut.EdnUrndOKnown_A");
+          $asserton(0, "tb.dut.IdleOKnown_A");
+          $asserton(0, "tb.dut.tlul_checker");
+          $asserton(0, "push_pull_if");
+          $asserton(0, "prim_mubi4_sender");
+          $asserton(0, "prim_alert_sender");
+          $asserton(0, "prim_count");
+          $asserton(0, "tlul_adapter_sram");
+          cfg.m_tl_agent_cfg.check_tl_errs = 1'b1;
         end
       end
     end
