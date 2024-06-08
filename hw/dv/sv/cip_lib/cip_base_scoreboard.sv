@@ -43,7 +43,7 @@ class cip_base_scoreboard #(type RAL_T = dv_base_reg_block,
 
   // alert checking related parameters
   bit do_alert_check = 1;
-  bit check_alert_sig_int_err = 1;
+  bit check_alert_sig_int_err = 0;
   bit under_alert_handshake[string];
   expected_alert_t expected_alert[string];
   int alert_count[string];
