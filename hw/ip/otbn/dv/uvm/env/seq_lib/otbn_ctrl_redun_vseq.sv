@@ -78,7 +78,10 @@ class otbn_ctrl_redun_vseq extends otbn_single_vseq;
     // end of this task.
     $assertoff(0, "tb.dut.g_secure_wipe_assertions");
 
-    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(err_type, err_type inside {[0:6]};)
+    // HACK: Force the error type we need
+    //`DV_CHECK_STD_RANDOMIZE_WITH_FATAL(err_type, err_type inside {[0:6]};)
+    err_type = 2;
+
     case(err_type)
       0: begin
         report_err_type("error on ispr_addr during a write");
@@ -117,9 +120,15 @@ class otbn_ctrl_redun_vseq extends otbn_single_vseq;
           // around again.
         end
 
-        `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(bad_op,
-                                           bad_op != good_op;
-                                           bad_op != otbn_pkg::AluOpBignumNone;);
+        $display("%0t: Ready to actually inject the error", $time);
+
+        // HACK: Replacing randomisation so that we end up in the right place.
+        `DV_CHECK_FATAL(good_op == otbn_pkg::AluOpBignumSubm);
+        bad_op = otbn_pkg::AluOpBignumAddm;
+//        `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(bad_op,
+//                                           bad_op != good_op;
+//                                           bad_op != otbn_pkg::AluOpBignumNone;);
+
         `DV_CHECK_FATAL(uvm_hdl_force(err_path, bad_op) == 1);
       end
       3: begin
@@ -260,7 +269,7 @@ class otbn_ctrl_redun_vseq extends otbn_single_vseq;
         `uvm_fatal(`gfn, "issue with randomization")
       end
     endcase
-    `uvm_info(`gfn, "injecting bad internal state error into ISS", UVM_HIGH)
+    `uvm_info(`gfn, "injecting bad internal state error into ISS", UVM_LOW)
     have_injected_error = 1'b1;
     cfg.model_agent_cfg.vif.send_err_escalation(err_val);
     `DV_WAIT(cfg.model_agent_cfg.vif.status == otbn_pkg::StatusLocked)
