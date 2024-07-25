@@ -96,7 +96,7 @@ This flag governs the behaviour of `run_seq_with_rand_reset_vseq`, described
 below.
 
 The base class provides a virtual method called `initialize()` which is called
-in `cip_base_test::build_phase` to create some of the objects listed above. If
+in `dv_base_test::build_phase` to create some of the objects listed above. If
 the extended IP env cfg class has more such objects added,  then the `initialize()`
 method is required to be overridden to create those objects as well.
 
