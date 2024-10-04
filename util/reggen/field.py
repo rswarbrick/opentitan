@@ -229,7 +229,8 @@ class Field:
                  default_hwqe: bool,
                  shadowed: bool,
                  is_alias: bool,
-                 raw: object) -> 'Field':
+                 raw: object,
+                 bindings: Dict[str, int]) -> 'Field':
         where = 'field {} of {} register'.format(field_idx, reg_name)
         rd = check_keys(raw, where,
                         list(REQUIRED_FIELDS.keys()),
@@ -294,7 +295,7 @@ class Field:
         # directly. If it is 'x' then field_resval will be None.
         field_resval_raw = rd.get('resval')
         field_resval = Field.resval_from_raw(bits,
-                                             {},  # TODO: Bindings for multiregs
+                                             bindings,
                                              field_resval_raw,
                                              is_mubi,
                                              where)
