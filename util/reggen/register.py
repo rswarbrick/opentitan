@@ -505,12 +505,9 @@ class Register(RegBase):
 
         The merged register will be have address offset and be called name.
 
-        When the fields are collected, there might be a gap before the fields
-        from each input register and this gap will be from the lsb of the
-        bottom field in the respective input register.
-
         The regs argument should be a list of pairs (reg, idx) which means that
-        we want a copy of reg, but renamed by appending "_<idx>".
+        we want a copy of reg, but renamed by appending "_<idx>". These input
+        registers are concatenated, including gaps before field LSBs.
 
         If alias_target is not None, the merged register will be an alias
         register that points at the named register.
@@ -522,8 +519,7 @@ class Register(RegBase):
         If field_desc_override is not None, it will be used instead of fields' desc
         values.
 
-        If strip_field is True then it will be passed to Field.replicate,
-        dropping any values from field enum types.
+        If strip_field is True, we drop any values from field enum types.
         '''
         assert regs
 
@@ -554,26 +550,37 @@ class Register(RegBase):
         for reg, reg_idx in regs:
             assert reg.regwen is None or regwen is not None
 
-            bit_idx += reg.fields[0].bits.lsb
+            # We want to collect up all the fields from this input register,
+            # starting with an LSB of bit_idx
+            reg_bit0 = bit_idx
+            bit_idx += reg.fields[-1].bits.msb + 1
 
-            # Collect up all the fields from this input register, starting with
-            # an LSB of zero.
-            reg_fields = []
             for field in reg.fields:
-                reg_fields += field.replicate(reg_idx, 1,
-                                              field_desc_override or field.desc,
-                                              strip_field)
+                field_name_suff = f'_{reg_idx}'
 
-            # Translate each field up by bit_idx
-            for field in reg_fields:
-                field.bits = field.bits.make_translated(bit_idx)
+                # Translate the field to match the copy of the register that
+                # started at reg_bit0
+                field_copy = field.make_translated(reg_bit0)
 
-            # Collect up the fields
-            fields += reg_fields
+                # The generated field will need a name based on reg_idx (the
+                # index of the register copy that's being used). Similarly, we
+                # have to redirect any alias_target if there is one.
+                field_copy.name += field_name_suff
+                if field_copy.alias_target is not None:
+                    field_copy.alias_target += field_name_suff
 
-            # Update bit_idx to be the starting index for the fields of the
-            # next register.
-            bit_idx = reg_fields[-1].bits.msb + 1
+                # Apply field_desc_override (which allows the caller to
+                # simplify documentation for the field when there are lots of
+                # copies).
+                if field_desc_override is not None:
+                    field_copy.desc = field_desc_override
+
+                # Finally, strip out any associated enum type if that was
+                # requested.
+                if strip_field:
+                    field_copy.enum = None
+
+                fields.append(field_copy)
 
         # Don't specify a reset value for the new register. Any reset value
         # defined for the original register will have propagated to its fields,
