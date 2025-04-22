@@ -90,6 +90,7 @@
 `include "chip_sw_aes_masking_off_vseq.sv"
 `include "chip_padctrl_attributes_vseq.sv"
 `include "chip_sw_rom_e2e_base_vseq.sv"
+`include "chip_sw_rom_e2e_ft_perso_vseq.sv"
 `include "chip_sw_rom_e2e_shutdown_exception_c_vseq.sv"
 `include "chip_sw_rom_e2e_shutdown_output_vseq.sv"
 `include "chip_sw_rom_e2e_sigverify_always_a_bad_b_bad_vseq.sv"
