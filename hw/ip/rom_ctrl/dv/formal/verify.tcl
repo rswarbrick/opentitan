@@ -258,3 +258,35 @@ set pre_phases 1
 # property that comes as part of the main flow.
 assert -name "AdapterReqFifoMoreFull_A" \
     "dut.u_tl_adapter_rom.u_rspfifo.depth_o <= dut.u_tl_adapter_rom.u_reqfifo.depth_o"
+
+# There are quite a lot of assertions in u_tl_adapter_rom that talk about situations where there is
+# a ROM request being handled from TileLink. They are true, but the first response is after the
+# entirety of ROM has been read. Strengthen the properties (and speed up their proofs) by allowing a
+# glitchy FSM counter for them.
+foreach rel_path {
+    "rvalidHighReqFifoEmpty"
+    "rvalidHighWhenRspFifoFull"
+    "u_rspfifo.gen_normal_fifo.OnlyRvalidWhenNotUnderRst_A"
+    "u_rspfifo.gen_normal_fifo.depthShallNotExceedParamDepth"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.ChangeBackward_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.g_check_incr.IncrDnCnt_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.g_check_incr.IncrUpCnt_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.g_check_set_fwd_a.SetFwd_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.ChangeBackward_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_incr.IncrDnCnt_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_incr.IncrUpCnt_A"
+    "u_rspfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_set_fwd_a.SetFwd_A"
+    "u_sramreqfifo.gen_normal_fifo.OnlyRvalidWhenNotUnderRst_A"
+    "u_sramreqfifo.gen_normal_fifo.depthShallNotExceedParamDepth"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.ChangeBackward_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.g_check_incr.IncrDnCnt_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.g_check_incr.IncrUpCnt_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_rptr.g_check_set_fwd_a.SetFwd_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.ChangeBackward_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_incr.IncrDnCnt_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_incr.IncrUpCnt_A"
+    "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_set_fwd_a.SetFwd_A"
+} {
+    task -edit GlitchyCounter -copy "tb.dut.u_tl_adapter_rom.${rel_path}*"
+    assert -disable "tb.dut.u_tl_adapter_rom.${rel_path}"
+}
