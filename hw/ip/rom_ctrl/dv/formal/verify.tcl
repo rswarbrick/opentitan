@@ -244,3 +244,17 @@ assert -name "pre0::CheckerGoodStable_A" \
 # to get a response.
 assert -name "pre1::WaitingIfKmacDataValid" \
     "${fsm_path}.kmac_rom_vld_o -> ${fsm_path}.u_compare.state_q == ${fsm_path}.u_compare.Waiting"
+
+# Configure the phased prove command in fpv.tcl so that it proves the two layers of "pre" properties
+# first.
+set pre_phases 1
+
+# In tlul_adapter_sram, a request gets held in u_reqfifo until it is used to help form the TL
+# response with data that gets held in u_rspfifo. As such, there will always be at least as many
+# items in u_reqfifo as there are in u_rspfifo, which means there will always be space to receive
+# responses.
+#
+# Note: This isn't marked as part of a "pre phase" because the proof seems to need some other
+# property that comes as part of the main flow.
+assert -name "AdapterReqFifoMoreFull_A" \
+    "dut.u_tl_adapter_rom.u_rspfifo.depth_o <= dut.u_tl_adapter_rom.u_reqfifo.depth_o"
