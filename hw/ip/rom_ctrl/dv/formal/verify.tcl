@@ -290,3 +290,14 @@ foreach rel_path {
     task -edit GlitchyCounter -copy "tb.dut.u_tl_adapter_rom.${rel_path}*"
     assert -disable "tb.dut.u_tl_adapter_rom.${rel_path}"
 }
+
+# In rom_ctrl_fsm.sv, there is an assertion called RelAddrWide_A. This is checking that the
+# subtraction that forms rel_addr_wide gives a small enough index that the truncation to rel_addr
+# doesn't drop anything important.
+#
+# It only runs after the block has run through the lower part of the ROM. Unfortunately, using a
+# stopat to skip that initial part doesn't really work: the assertion then checks that the address
+# counter works properly.
+#
+# Disable the precondition cover property (because it won't really tell us much).
+cover -disable "tb.dut.gen_fsm_scramble_enabled.u_checker_fsm.RelAddrWide_A:precondition1"
