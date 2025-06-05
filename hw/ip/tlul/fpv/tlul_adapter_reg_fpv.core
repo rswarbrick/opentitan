@@ -1,0 +1,21 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:fpv:tlul_adapter_reg_fpv:0.1"
+description: "tlul_adapter_reg FPV target"
+filesets:
+  files_formal:
+    depend:
+      - lowrisc:ip:tlul
+    files:
+      - tb/tlul_adapter_reg_tb.sv
+      - vip/tlul_adapter_reg_assert_fpv.sv
+    file_type: systemVerilogSource
+
+targets:
+  formal:
+    default_tool: icarus
+    filesets:
+      - files_formal
+    toplevel: tlul_adapter_reg_tb
