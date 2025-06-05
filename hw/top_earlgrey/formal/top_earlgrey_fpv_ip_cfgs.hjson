@@ -53,5 +53,17 @@
                exp_fail_hjson: "{proj_root}/hw/top_earlgrey/ip_autogen/rv_plic/fpv/rv_plic_expected_failure.hjson"
                after_load: ["{proj_root}/hw/top_earlgrey/ip_autogen/rv_plic/fpv/tb/coverage.tcl"]
              }
+
+             // HACK: This isn't earlgrey-specific so it should probably be living somewhere else
+             {
+               name: tlul_adapter_reg_fpv
+               dut: tlul_adapter_reg_tb
+               fusesoc_core: lowrisc:fpv:tlul_adapter_reg_fpv
+               import_cfgs: ["{proj_root}/hw/formal/tools/dvsim/common_fpv_cfg.hjson"]
+               rel_path: "hw/ip/tlul_adapter_reg/{sub_flow}/{tool}"
+               cov: true
+             }
+
+
             ]
 }
