@@ -62,6 +62,7 @@
                import_cfgs: ["{proj_root}/hw/formal/tools/dvsim/common_fpv_cfg.hjson"]
                rel_path: "hw/ip/tlul_adapter_reg/{sub_flow}/{tool}"
                cov: true
+               after_load: ["{proj_root}/hw/ip/tlul/fpv/tcl/tlul_adapter_reg.tcl"]
              }
 
 
