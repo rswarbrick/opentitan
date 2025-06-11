@@ -20,6 +20,11 @@ module tlul_adapter_reg_assert_fpv #(
   input logic              rst_ni
 );
 
+  import prim_secded_pkg::prim_secded_inv_64_57_enc;
+  import prim_secded_pkg::prim_secded_inv_39_32_enc;
+  import prim_secded_pkg::prim_secded_inv_64_57_dec;
+  import prim_secded_pkg::prim_secded_inv_39_32_dec;
+
   // The number of bits needed to address bytes within a data word
   localparam int SubAW = $clog2(RegDw/8);
 
@@ -74,6 +79,41 @@ module tlul_adapter_reg_assert_fpv #(
   if (CmdIntgCheck) begin : gen_intg_check
     IntgError_C: cover property (dut.intg_error_o);
   end
+
+  // Recognising command integrity errors //////////////////////////////////////////////////////////
+
+  // If command integrity checks are enabled, we want to make sure that the integrity checking works
+  // properly. The feature means that a message will have its command integrity checked. If it
+  // doesn't match, the message will have an integrity error response and, what's more, that error
+  // will be latched until reset.
+  //
+  // We cheat slightly in this file and check the behaviour in two stages. This logic checks that we
+  // correctly model the internal intg_error signal.
+  logic fpv_cmd_intg_err;
+
+  if (CmdIntgCheck) begin
+    tlul_pkg::tl_h2d_cmd_intg_t             cmd_bits;
+    logic [63:0]                            encoded_cmd;
+    prim_secded_pkg::secded_64_57_t         decoded_cmd;
+    prim_secded_pkg::secded_hamming_39_32_t decoded_data;
+
+    // Checking command integrity
+    assign cmd_bits = tlul_pkg::extract_h2d_cmd_intg(dut.tl_i);
+    assign encoded_cmd = {dut.tl_i.a_user.cmd_intg, tlul_pkg::H2DCmdMaxWidth'(cmd_bits)};
+    assign decoded_cmd = prim_secded_inv_64_57_dec(encoded_cmd);
+
+    // Checking data integrity
+    assign decoded_data = prim_secded_inv_39_32_dec({dut.tl_i.a_user.data_intg,
+                                                     tlul_pkg::DataMaxWidth'(dut.tl_i.a_data)});
+
+    assign fpv_cmd_intg_err = dut.tl_i.a_valid && (decoded_cmd.err | decoded_data.err);
+  end else begin
+    assign fpv_cmd_intg_err = 1'b0;
+  end
+
+  IntgError_A: assert property (dut.intg_error == fpv_cmd_intg_err);
+  IntgErrorPort_A: assert property (dut.intg_error |=> dut.intg_error_o);
+  IntgErrorPortStable_A: assert property (##1 !$fell(dut.intg_error_o));
 
   // Translation from A channel message to read request ////////////////////////////////////////////
 
@@ -143,14 +183,6 @@ module tlul_adapter_reg_assert_fpv #(
   assign valid_with_instr_type = is_valid_instr_type &&
                                  (dut.tl_i.a_user.instr_type == prim_mubi_pkg::MuBi4True ->
                                   dut.tl_i.a_opcode == tlul_pkg::Get && fetches_allowed);
-
-  // True if there is a command integrity error on this cycle. This is false unless CmdIntgCheck is
-  // true.
-  //
-  // TODO: We currently cheat and use an internal signal (instead of doing the integrity computation
-  //       in the TB)
-  logic fpv_cmd_intg_err;
-  assign fpv_cmd_intg_err = dut.intg_error;
 
   // True if the data fields on the A channel are seem reasonable for an operation. Specific
   // operations (Get, PutPartialData and PutFullData) will need extra checks.
@@ -284,4 +316,38 @@ module tlul_adapter_reg_assert_fpv #(
   // Because the adapter doesn't allow the request and response to overlap, it's not actually
   // possible for re_o or we_o to be high for multiple consecutive cycles.
   AccessesPulse_A: assert property (not (dut.re_o || dut.we_o)[*2]);
+
+  // Properties about integrity generation and checking ////////////////////////////////////////////
+
+  // If response integrity generation is not enabled, we expect tl_o.d_user.rsp_intg to be exactly
+  // zero. If it is enabled, we expect it to match the top D2HRspIntgWidth bits of a SECDED
+  // calculation on some response bits.
+  if (!EnableRspIntgGen) begin : gen_no_rsp_intg_gen
+    RspIntgPassThrough_A: assert property (!|dut.tl_o.d_user.rsp_intg);
+  end else begin : gen_rsp_intg_gen
+    tlul_pkg::tl_d2h_rsp_intg_t fpv_d2h_rsp;
+    assign fpv_d2h_rsp = tlul_pkg::extract_d2h_rsp_intg(dut.tl_o);
+
+    logic [tlul_pkg::D2HRspIntgWidth-1:0] fpv_rsp_intg;
+    logic [tlul_pkg::D2HRspMaxWidth-1:0]  fpv_unused_lower_bits;
+
+    assign {fpv_rsp_intg, fpv_unused_lower_bits} = prim_secded_inv_64_57_enc(57'(fpv_d2h_rsp));
+
+    RspIntgGen_A: assert property (dut.tl_o.d_user.rsp_intg == fpv_rsp_intg);
+  end
+
+  // If data integrity generation is not enabled, we expect tl_o.d_user.data_intg to be exactly
+  // zero. If it is enabled, we expect it to match the top DataIntgWidth bits of a SECDED
+  // calculation on the data itself.
+  if (!EnableDataIntgGen) begin : gen_no_data_intg_gen
+    DataIntgPassThrough_A: assert property (!|dut.tl_o.d_user.data_intg);
+  end else begin : gen_data_intg_gen
+    logic [tlul_pkg::DataIntgWidth-1:0] fpv_data_intg;
+    logic [tlul_pkg::DataMaxWidth-1:0]  fpv_unused_lower_bits;
+
+    assign {fpv_data_intg, fpv_unused_lower_bits} = prim_secded_inv_39_32_enc(32'(dut.tl_o.d_data));
+
+    DataIntgGen_A: assert property (dut.tl_o.d_user.data_intg == fpv_data_intg);
+  end
+
 endmodule
