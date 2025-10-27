@@ -287,8 +287,7 @@ foreach rel_path {
     "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_incr.IncrUpCnt_A"
     "u_sramreqfifo.gen_normal_fifo.u_fifo_cnt.gen_secure_ptrs.u_wptr.g_check_set_fwd_a.SetFwd_A"
 } {
-    task -edit GlitchyCounter -copy "tb.dut.u_tl_adapter_rom.${rel_path}*"
-    assert -disable "tb.dut.u_tl_adapter_rom.${rel_path}"
+    move_to_task GlitchyCounter "tb.dut.u_tl_adapter_rom.${rel_path}"
 }
 
 # In rom_ctrl_fsm.sv, there is an assertion called RelAddrWide_A. This is checking that the
