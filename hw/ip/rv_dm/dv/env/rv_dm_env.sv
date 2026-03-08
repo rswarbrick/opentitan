@@ -58,13 +58,22 @@ class rv_dm_env extends cip_base_env #(
     m_mode_agent = rv_dm_mode_agent::type_id::create("m_mode_agent", this);
     m_mode_agent.cfg = cfg.m_mode_agent_cfg;
 
-    m_jtag_dmi_monitor = jtag_dmi_monitor#()::type_id::create("m_jtag_dmi_monitor", this);
-    m_jtag_dmi_monitor.cfg = cfg.m_jtag_agent_cfg;
-    m_jtag_dmi_monitor.set_dmi_address(cfg.m_jtag_dtm_ral.dmi.get_address());
+    // We only create a JTAG DMI monitor if there is a DTM RAL being tracked. At block level, this
+    // will have been created by cfg's initialize function (which is called by
+    // dv_base_env::build_phase). With vertical reuse, it's possible this was not not provided,
+    // because the chip-level environment is in a mode without one.
+    if (cfg.m_jtag_dtm_ral != null) begin
+      m_jtag_dmi_monitor = jtag_dmi_monitor#()::type_id::create("m_jtag_dmi_monitor", this);
+      m_jtag_dmi_monitor.cfg = cfg.m_jtag_agent_cfg;
+      m_jtag_dmi_monitor.set_dmi_address(cfg.m_jtag_dtm_ral.dmi.get_address());
+    end
 
-    m_sba_access_monitor = sba_access_monitor#()::type_id::create("m_sba_access_monitor", this);
-    m_sba_access_monitor.cfg = cfg.m_jtag_agent_cfg;
-    m_sba_access_monitor.jtag_dmi_ral = cfg.jtag_dmi_ral;
+    // Similarly, we only create an SBA access monitor if there is a DMI RAL being tracked.
+    if (cfg.jtag_dmi_ral != null) begin
+      m_sba_access_monitor = sba_access_monitor#()::type_id::create("m_sba_access_monitor", this);
+      m_sba_access_monitor.cfg = cfg.m_jtag_agent_cfg;
+      m_sba_access_monitor.jtag_dmi_ral = cfg.jtag_dmi_ral;
+    end
   endfunction
 
   function void connect_phase(uvm_phase phase);
@@ -83,10 +92,10 @@ class rv_dm_env extends cip_base_env #(
     end
 
     if (cfg.is_active) begin
-      if (cfg.m_jtag_agent_cfg.is_active) begin
+      if (cfg.m_jtag_agent_cfg != null && cfg.m_jtag_agent_cfg.is_active) begin
         virtual_sequencer.jtag_sequencer_h = m_jtag_agent.sequencer;
       end
-      if (cfg.m_tl_sba_agent_cfg.is_active) begin
+      if (cfg.m_tl_sba_agent_cfg != null && cfg.m_tl_sba_agent_cfg.is_active) begin
         virtual_sequencer.tl_sba_sequencer_h = m_tl_sba_agent.sequencer;
       end
     end

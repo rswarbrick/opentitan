@@ -562,6 +562,103 @@ module tb;
 `undef PD_MAIN_PATH
   end
 
+  if (1) begin : gen_rv_dm
+    wire clk, rst_n, clk_lc, rst_lc_n;
+    assign clk = dut.top_earlgrey.u_rv_dm.clk_i;
+    assign rst_n = dut.top_earlgrey.u_rv_dm.rst_ni;
+    assign clk_lc = dut.top_earlgrey.u_rv_dm.clk_lc_i;
+    assign rst_lc_n = dut.top_earlgrey.u_rv_dm.rst_lc_ni;
+
+    clk_rst_if clk_rst_if (.clk (clk), .rst_n (rst_n));
+    clk_rst_if clk_lc_rst_if (.clk(clk_lc), .rst_n(rst_lc_n));
+
+    rv_dm_if rv_dm_if(.clk (clk), .rst_n (rst_n));
+    rv_dm_mode_if mode_if(.clk(clk));
+
+    assign mode_if.is_active = 1'b0;
+    assign mode_if.next_dm_addr             = dut.top_earlgrey.u_rv_dm.next_dm_addr_i;
+    assign mode_if.lc_hw_debug_clr          = dut.top_earlgrey.u_rv_dm.lc_hw_debug_clr_i;
+    assign mode_if.lc_hw_debug_en           = dut.top_earlgrey.u_rv_dm.lc_hw_debug_en_i;
+    assign mode_if.lc_dft_en                = dut.top_earlgrey.u_rv_dm.lc_dft_en_i;
+    assign mode_if.pinmux_hw_debug_en       = dut.top_earlgrey.u_rv_dm.pinmux_hw_debug_en_i;
+    assign mode_if.lc_check_byp_en          = dut.top_earlgrey.u_rv_dm.lc_check_byp_en_i;
+    assign mode_if.lc_escalate_en           = dut.top_earlgrey.u_rv_dm.lc_escalate_en_i;
+    assign mode_if.lc_init_done             = dut.top_earlgrey.u_rv_dm.lc_init_done_i;
+    assign mode_if.strap_en                 = dut.top_earlgrey.u_rv_dm.strap_en_i;
+    assign mode_if.strap_en_override        = dut.top_earlgrey.u_rv_dm.strap_en_override_i;
+    assign mode_if.otp_dis_rv_dm_late_debug = dut.top_earlgrey.u_rv_dm.otp_dis_rv_dm_late_debug_i;
+    assign mode_if.scanmode                 = dut.top_earlgrey.u_rv_dm.scanmode_i;
+
+    assign rv_dm_if.is_active = 1'b0;
+    assign rv_dm_if.scan_rst_n   = dut.top_earlgrey.u_rv_dm.scan_rst_ni;
+    assign rv_dm_if.ndmreset_req = dut.top_earlgrey.u_rv_dm.ndmreset_req_o;
+    assign rv_dm_if.dmactive     = dut.top_earlgrey.u_rv_dm.dmactive_o;
+    assign rv_dm_if.debug_req    = dut.top_earlgrey.u_rv_dm.debug_req_o;
+    assign rv_dm_if.unavailable  = dut.top_earlgrey.u_rv_dm.unavailable_i;
+
+    tl_if regs_tl_if(.clk(clk), .rst_n(rst_n));
+    tl_if mem_tl_if(.clk(clk), .rst_n(rst_n));
+    tl_if sba_tl_if(.clk(clk), .rst_n(rst_n));
+
+    assign regs_tl_if.if_mode = Monitor;
+    assign regs_tl_if.h2d = dut.top_earlgrey.u_rv_dm.regs_tl_d_i;
+    assign regs_tl_if.d2h = dut.top_earlgrey.u_rv_dm.regs_tl_d_o;
+
+    assign mem_tl_if.if_mode = Monitor;
+    assign mem_tl_if.h2d = dut.top_earlgrey.u_rv_dm.mem_tl_d_i;
+    assign mem_tl_if.d2h = dut.top_earlgrey.u_rv_dm.mem_tl_d_o;
+
+    assign sba_tl_if.if_mode = Monitor;
+    assign sba_tl_if.h2d = dut.top_earlgrey.u_rv_dm.sba_tl_h_i;
+    assign sba_tl_if.d2h = dut.top_earlgrey.u_rv_dm.sba_tl_h_o;
+
+    jtag_if jtag_if();
+
+    assign jtag_if.is_active = 1'b0;
+    assign jtag_if.tck    = dut.top_earlgrey.u_rv_dm.jtag_i.tck;
+    assign jtag_if.trst_n = dut.top_earlgrey.u_rv_dm.jtag_i.trst_n;
+    assign jtag_if.tms    = dut.top_earlgrey.u_rv_dm.jtag_i.tms;
+    assign jtag_if.tdi    = dut.top_earlgrey.u_rv_dm.jtag_i.tdi;
+    assign jtag_if.tdo    = dut.top_earlgrey.u_rv_dm.jtag_o.tdo;
+
+    // Register the various interfaces so that they can be picked up by the passive rv_dm
+    // environment.
+    initial begin
+      automatic string env_path = "*.env.m_rv_dm_env";
+      automatic string jtag_agent_path = {env_path, ".m_jtag_agent"};
+      automatic string mode_agent_path = {env_path, ".m_mode_agent"};
+
+      uvm_config_db#(virtual rv_dm_if)::set(null, env_path, "rv_dm_vif", rv_dm_if);
+      uvm_config_db#(virtual rv_dm_mode_if)::set(null, mode_agent_path, "vif", mode_if);
+
+      uvm_config_db#(virtual clk_rst_if)::set(null, env_path, "clk_lc_rst_vif", clk_lc_rst_if);
+
+      // Connect the clk/rst and TL interfaces that apply to rv_dm's main memory model
+      uvm_config_db#(virtual clk_rst_if)::set(null, env_path, "clk_rst_vif", clk_rst_if);
+      uvm_config_db#(virtual tl_if)::set(null, {env_path, ".m_tl_sba_agent*"}, "vif", sba_tl_if);
+
+      // Connect clk/rst/TL for regs_reg_block
+      uvm_config_db#(virtual clk_rst_if)::set(null, env_path,
+                                              "clk_rst_vif_rv_dm_regs_reg_block", clk_rst_if);
+      uvm_config_db#(virtual tl_if)::set(null, {env_path, ".m_tl_agent_rv_dm_regs_reg_block*"},
+                                         "vif", regs_tl_if);
+
+      // Connect clk/rst/TL for mem_reg_block
+      uvm_config_db#(virtual clk_rst_if)::set(null, env_path,
+                                              "clk_rst_vif_rv_dm_mem_reg_block", clk_rst_if);
+      uvm_config_db#(virtual tl_if)::set(null, {env_path, ".m_tl_agent_rv_dm_mem_reg_block*"},
+                                         "vif", mem_tl_if);
+
+      // Connect the JTAG interface
+      uvm_config_db#(virtual jtag_if)::set(null, jtag_agent_path, "vif", jtag_if);
+
+      // Connect rv_dm's alert interface to the passive environment (which will instantiate an extra
+      // alert agent and run it in passive mode).
+      uvm_config_db#(virtual alert_esc_if)::set(null, {env_path, ".m_alert_agent_fatal_fault"},
+                                                "vif", alert_if[TopEarlgreyAlertIdRvDmFatalFault]);
+    end
+  end
+
   // Instantiate the memory backdoor util instances.
   if (prim_pkg::PrimTechName == "Generic") begin : gen_generic
     initial begin

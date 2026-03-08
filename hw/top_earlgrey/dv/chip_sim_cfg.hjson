@@ -56,7 +56,8 @@
              "top_earlgrey_error_injection_ifs_bind",
              "top_earlgrey_bind",
              "xbar_main_bind",
-             "xbar_peri_bind"]
+             "xbar_peri_bind",
+             "rv_dm_bind"]
 
   top_dv_path: "{proj_root}/hw/top_earlgrey/dv"
   top_autogen_path: "{proj_root}/hw/top_earlgrey/ip_autogen"
