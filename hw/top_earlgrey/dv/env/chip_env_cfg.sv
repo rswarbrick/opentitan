@@ -132,6 +132,9 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
   // An env_cfg for a passive bound-in rom_ctrl environment
   rom_ctrl_env_pkg::rom_ctrl_env_cfg m_rom_ctrl_env_cfg;
 
+  // An env_cfg for a passive bound-in rv_dm environment
+  rv_dm_env_pkg::rv_dm_env_cfg m_rv_dm_env_cfg;
+
   // NOTE: The clk_freq_mhz variable created in the base class was meant to be used by clk_rst_vif
   // interface that is passed by default by the testbench (retrieved by dv_base_env class). It was
   // meant for a CIP-compliant testbench to drive the clock and reset to the DUT. The chip level
@@ -162,6 +165,9 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     super.new(name);
     m_rom_ctrl_env_cfg = rom_ctrl_env_pkg::rom_ctrl_env_cfg::type_id::create("m_rom_ctrl_env_cfg");
     m_rom_ctrl_env_cfg.set_is_active(1'b0);
+
+    m_rv_dm_env_cfg = rv_dm_env_pkg::rv_dm_env_cfg::type_id::create("m_rv_dm_env_cfg");
+    m_rv_dm_env_cfg.set_is_active(1'b0);
   endfunction
 
   `uvm_object_param_utils_begin(chip_env_cfg#(RAL_T))
@@ -268,6 +274,19 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     // Set up the config for the bound-in rom_ctrl environment, passing inherit_ral_models=1 so that
     // it uses the register blocks whose handles we just copied.
     m_rom_ctrl_env_cfg.initialize(1'b1);
+
+    // Copy handles to rv_dm's register blocks into its block-level environment config
+    m_rv_dm_env_cfg.ral_models["rv_dm_regs_reg_block"] = ral.rv_dm_regs;
+    m_rv_dm_env_cfg.ral_models["rv_dm_mem_reg_block"]  = ral.rv_dm_mem;
+
+    // Copy handles for rv_dm's JTAG models (jtag_dtm_ral / jtag_dmi_ral) into its block-level
+    // environment config.
+    m_rv_dm_env_cfg.m_jtag_dtm_ral = m_jtag_dtm_ral;
+    m_rv_dm_env_cfg.jtag_dmi_ral   = jtag_dmi_ral;
+
+    // Set up the config for the bound-in rv_dm environment, passing inherit_ral_models=1 so that it
+    // uses the register blocks whose handles we just copied.
+    m_rv_dm_env_cfg.initialize(1'b1);
   endfunction
 
   // Configure the environment to run a DMI agent over a JTAG connection.
@@ -293,6 +312,9 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
 
     m_jtag_riscv_agent_cfg.m_jtag_agent_cfg = m_jtag_agent_cfg;
 
+    // Pass the DTM ral to rv_dm's block-level environment
+    m_rv_dm_env_cfg.m_jtag_dtm_ral = m_jtag_dtm_ral;
+
     // Create the DMI register block. Because use_jtag_dmi was false at the start of the function,
     // we know it is currently null.
     if (jtag_dmi_ral != null) `uvm_fatal(`gfn, "jtag_dmi_ral unexpectedly set")
@@ -317,9 +339,12 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     jtag_dmi_ral.sbcs.sbasize.set_reset(32);
     apply_jtag_dmi_ral_csr_excl();
 
-    // Finally, tell the debugger (which should already exist) about the register block we just
-    // created.
+    // Tell the debugger (which should already exist) about the register block we just created.
     debugger.set_ral(jtag_dmi_ral);
+
+    // Pass the DMI ral and the debugger to rv_dm's block-level environment
+    m_rv_dm_env_cfg.jtag_dmi_ral = jtag_dmi_ral;
+    m_rv_dm_env_cfg.debugger     = debugger;
   endfunction
 
   // Disable functional coverage of comportable IP-specific specialized registers.
