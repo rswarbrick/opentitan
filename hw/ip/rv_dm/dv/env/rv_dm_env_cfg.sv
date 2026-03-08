@@ -51,6 +51,11 @@ class rv_dm_env_cfg extends cip_base_env_cfg #(.RAL_T(rv_dm_regs_reg_block));
     m_mode_agent_cfg = rv_dm_mode_agent_cfg::type_id::create("m_mode_agent_cfg");
   endfunction
 
+  virtual function void set_is_active(bit active);
+    super.set_is_active(active);
+    m_mode_agent_cfg.is_active = active;
+  endfunction
+
   virtual function void initialize(bit inherit_ral_models = 1'b0);
     list_of_alerts = rv_dm_env_pkg::LIST_OF_ALERTS;
     tl_intg_alert_name = "fatal_fault";
@@ -87,34 +92,44 @@ class rv_dm_env_cfg extends cip_base_env_cfg #(.RAL_T(rv_dm_regs_reg_block));
     m_tl_sba_agent_cfg.is_active = 1'b1;
     m_tl_sba_agent_cfg.max_outstanding_req = 1;
 
-    // Create a JTAG DTM RAL and give it the right IDCODE register value.
-    m_jtag_dtm_ral = create_jtag_dtm_reg_block("m_jtag_dtm_ral");
-    m_jtag_dtm_ral.idcode.set_reset(RV_DM_JTAG_IDCODE);
+    // If inherit_ral_models is false, create a JTAG DTM RAL and give it the right IDCODE register
+    // value. Similarly, create a JTAG DMI RAL.
+    //
+    // If not, the environment is embedded in a higher level test, which is responsible for
+    // providing the JTAG RAL models. There might not be any (because the chip-level envirnment
+    // config has not run set_use_jtag_dmi). That's fine: in that case, we just have to avoid
+    // trying to use them in the rest of the block-level environment.
+    if (!inherit_ral_models) begin
+      m_jtag_dtm_ral = create_jtag_dtm_reg_block("m_jtag_dtm_ral");
+      m_jtag_dtm_ral.idcode.set_reset(RV_DM_JTAG_IDCODE);
 
-    jtag_dmi_ral = create_jtag_dmi_reg_block("jtag_dmi_ral",
-                                             m_jtag_agent_cfg,
-                                             m_jtag_dtm_ral.dmi,
-                                             m_jtag_dtm_ral.dtmcs);
-    // Fix the reset values of these fields based on our design.
-    `uvm_info(`gfn, "Fixing reset values in jtag_dmi_ral", UVM_LOW)
-    jtag_dmi_ral.hartinfo.dataaddr.set_reset(dm::DataAddr);
-    jtag_dmi_ral.hartinfo.datasize.set_reset(dm::DataCount);
-    jtag_dmi_ral.hartinfo.dataaccess.set_reset(1);
-    jtag_dmi_ral.hartinfo.nscratch.set_reset(2);
-    jtag_dmi_ral.abstractcs.datacount.set_reset(dm::DataCount);
-    jtag_dmi_ral.abstractcs.progbufsize.set_reset(dm::ProgBufSize);
-    jtag_dmi_ral.dmstatus.authenticated.set_reset(1);  // No authentication performed.
-    jtag_dmi_ral.sbcs.sbaccess32.set_reset(1);
-    jtag_dmi_ral.sbcs.sbaccess16.set_reset(1);
-    jtag_dmi_ral.sbcs.sbaccess8.set_reset(1);
-    jtag_dmi_ral.sbcs.sbasize.set_reset(32);
-    apply_jtag_dmi_ral_csr_excl();
+      jtag_dmi_ral = create_jtag_dmi_reg_block("jtag_dmi_ral",
+                                               m_jtag_agent_cfg,
+                                               m_jtag_dtm_ral.dmi,
+                                               m_jtag_dtm_ral.dtmcs);
 
-    // Create the JTAG RV debugger instance.
-    debugger = jtag_rv_debugger::type_id::create("debugger");
-    debugger.set_cfg(m_jtag_agent_cfg);
-    debugger.set_ral(jtag_dmi_ral);
-    debugger.num_harts = NUM_HARTS;
+      // Fix the reset values of these fields based on our design.
+      `uvm_info(`gfn, "Fixing reset values in jtag_dmi_ral", UVM_LOW)
+      jtag_dmi_ral.hartinfo.dataaddr.set_reset(dm::DataAddr);
+      jtag_dmi_ral.hartinfo.datasize.set_reset(dm::DataCount);
+      jtag_dmi_ral.hartinfo.dataaccess.set_reset(1);
+      jtag_dmi_ral.hartinfo.nscratch.set_reset(2);
+      jtag_dmi_ral.abstractcs.datacount.set_reset(dm::DataCount);
+      jtag_dmi_ral.abstractcs.progbufsize.set_reset(dm::ProgBufSize);
+      jtag_dmi_ral.dmstatus.authenticated.set_reset(1);  // No authentication performed.
+      jtag_dmi_ral.sbcs.sbaccess32.set_reset(1);
+      jtag_dmi_ral.sbcs.sbaccess16.set_reset(1);
+      jtag_dmi_ral.sbcs.sbaccess8.set_reset(1);
+      jtag_dmi_ral.sbcs.sbasize.set_reset(32);
+      apply_jtag_dmi_ral_csr_excl();
+
+      // Create a debugger, which uses jtag_dmi_ral. At chip level, this gets provided to the
+      // block-level environment as part of chip_env_cfg::set_use_jtag_dmi.
+      debugger = jtag_rv_debugger::type_id::create("debugger");
+      debugger.set_cfg(m_jtag_agent_cfg);
+      debugger.set_ral(jtag_dmi_ral);
+      debugger.num_harts = NUM_HARTS;
+    end
   endfunction
 
   protected virtual function void post_build_ral_settings(dv_base_reg_block ral);
@@ -133,6 +148,8 @@ class rv_dm_env_cfg extends cip_base_env_cfg #(.RAL_T(rv_dm_regs_reg_block));
 
   // Apply RAL exclusions externally since the RAL itself is considered generic. The IP it is used
   // in constrains the RAL with its implementation details.
+  //
+  // This is only called when jtag_dmi_ral is non-null.
   virtual function void apply_jtag_dmi_ral_csr_excl();
     csr_excl_item csr_excl = jtag_dmi_ral.get_excl_item();
 
