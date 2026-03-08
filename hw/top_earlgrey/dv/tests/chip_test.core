@@ -11,6 +11,7 @@ filesets:
   files_dv:
     depend:
       - lowrisc:dv:top_earlgrey_chip_env
+      - lowrisc:dv:rv_dm_sva
     files:
       - chip_test_pkg.sv
       - chip_base_test.sv: {is_include_file: true}

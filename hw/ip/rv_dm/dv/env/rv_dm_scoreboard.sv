@@ -38,7 +38,11 @@ class rv_dm_scoreboard extends cip_base_scoreboard #(
     tl_sba_d_chan_fifo = new("tl_sba_d_chan_fifo", this);
     // TODO: remove once support alert checking
     do_alert_check = 0;
-    selected_dtm_csr = cfg.m_jtag_dtm_ral.default_map.get_reg_by_offset(0);
+
+    // Track the JTAG DTM CSR if there is an associated DTM RAL.
+    if (cfg.m_jtag_dtm_ral != null) begin
+      selected_dtm_csr = cfg.m_jtag_dtm_ral.default_map.get_reg_by_offset(0);
+    end
   endfunction
 
   function void connect_phase(uvm_phase phase);
@@ -48,8 +52,8 @@ class rv_dm_scoreboard extends cip_base_scoreboard #(
   task run_phase(uvm_phase phase);
     super.run_phase(phase);
     fork
-      process_jtag_non_dmi_dtm_fifo();
-      process_jtag_non_sba_dmi_fifo();
+      if (cfg.m_jtag_dtm_ral != null) process_jtag_non_dmi_dtm_fifo();
+      if (cfg.jtag_dmi_ral != null)   process_jtag_non_sba_dmi_fifo();
       process_sba_access_fifo();
       process_tl_sba_a_chan_fifo();
       process_tl_sba_d_chan_fifo();
@@ -57,6 +61,8 @@ class rv_dm_scoreboard extends cip_base_scoreboard #(
   endtask
 
   // Receive and process incoming raw JTAG accesses to non-DMI DTM registers.
+  //
+  // This will only be called when cfg.m_jtag_dtm_ral is non-null.
   virtual task process_jtag_non_dmi_dtm_fifo();
     jtag_item item;
 
@@ -104,6 +110,8 @@ class rv_dm_scoreboard extends cip_base_scoreboard #(
   endtask
 
   // Receive and process incoming completed JTAG DMI accesses to non-SBA registers.
+  //
+  // This will only be called when cfg.jtag_dmi_ral is non-null.
   virtual task process_jtag_non_sba_dmi_fifo();
     uvm_reg       csr;
     jtag_dmi_item item;
@@ -472,9 +480,15 @@ class rv_dm_scoreboard extends cip_base_scoreboard #(
     jtag_non_sba_dmi_fifo.flush();
     tl_sba_a_chan_fifo.flush();
     tl_sba_d_chan_fifo.flush();
-    selected_dtm_csr = cfg.m_jtag_dtm_ral.idcode;
-    cfg.jtag_dmi_ral.reset(kind);
-    cfg.m_jtag_dtm_ral.reset(kind);
+
+    if (cfg.jtag_dmi_ral != null) begin
+      cfg.jtag_dmi_ral.reset(kind);
+    end
+
+    if (cfg.m_jtag_dtm_ral != null) begin
+      selected_dtm_csr = cfg.m_jtag_dtm_ral.idcode;
+      cfg.m_jtag_dtm_ral.reset(kind);
+    end
   endfunction
 
   function void check_phase(uvm_phase phase);
