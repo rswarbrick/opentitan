@@ -44,6 +44,7 @@ filesets:
       - lowrisc:dv:usb20_usbdpi
       - lowrisc:dv:kmac_app_agent
       - lowrisc:dv:rom_ctrl_ifs
+      - lowrisc:dv:alert_agent
     files:
       - tb/chip_hier_macros.svh: {is_include_file: true}
       - autogen/tb__xbar_connect.sv: {is_include_file: true}
