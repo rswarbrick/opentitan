@@ -79,13 +79,27 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
   rand uart_agent_cfg       m_uart_agent_cfgs[NUM_UARTS];
   rand spi_agent_cfg        m_spi_device_agent_cfgs[NUM_SPI_HOSTS];
   rand jtag_riscv_agent_cfg m_jtag_riscv_agent_cfg;
-  rand jtag_agent_cfg       m_jtag_agent_cfg;
-  rand jtag_dtm_reg_block   m_jtag_dtm_ral;
   rand spi_agent_cfg        m_spi_host_agent_cfg;
   rand i2c_agent_cfg        m_i2c_agent_cfgs[NUM_I2CS];
 
-  // JTAG DMI register model
-  rand jtag_dmi_reg_block jtag_dmi_ral;
+  // Configuration for the JTAG agent used for accessing the DTM and DMI
+  //
+  // If m_jtag_riscv_agent_cfg.use_jtag_dmi is true, this should be instantiated before randomizing
+  // chip_env_cfg and jtag_dmi_ral will be randomized in chip_env_cfg::post_randomize.
+  jtag_agent_cfg m_jtag_agent_cfg;
+
+  // DTM register block (representing JTAG DTM registers from the Risc-V JTAG debug spec)
+  //
+  // If m_jtag_riscv_agent_cfg.use_jtag_dmi is true, this should be instantiated before randomizing
+  // chip_env_cfg and jtag_dmi_ral will be randomized in chip_env_cfg::post_randomize.
+  jtag_dtm_reg_block m_jtag_dtm_ral;
+
+  // JTAG DMI register model (representing registers accessible over DMI)
+  //
+  // If m_jtag_riscv_agent_cfg.use_jtag_dmi is true, this should be instantiated before randomizing
+  // chip_env_cfg and jtag_dmi_ral will be randomized in chip_env_cfg::post_randomize.
+  jtag_dmi_reg_block jtag_dmi_ral;
+
   // A constant that can be referenced from anywhere.
   string rv_dm_mem_ral_name = "rv_dm_debug_mem_reg_block";
   parameter uint RV_DM_JTAG_IDCODE = `BUILD_SEED;
@@ -129,6 +143,21 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     foreach (clk_freqs_mhz[i]) clk_freqs_mhz[i] == clk_freq_mhz;
   }
 
+  // The use_jtag_dmi flag in m_jtag_riscv_agent_cfg is set by calling set_use_jtag_dmi. This
+  // constraint checks that the flag gets set iff the associated objects have also been created. The
+  // three objects will themselves be randomised in post_randomize.
+  constraint use_jtag_dmi_c {
+    if (!m_jtag_riscv_agent_cfg.use_jtag_dmi) {
+      m_jtag_agent_cfg == null;
+      m_jtag_dtm_ral == null;
+      jtag_dmi_ral == null;
+    } else {
+      m_jtag_agent_cfg != null;
+      m_jtag_dtm_ral != null;
+      jtag_dmi_ral != null;
+    }
+  }
+
   function new (string name = "");
     super.new(name);
     m_rom_ctrl_env_cfg = rom_ctrl_env_pkg::rom_ctrl_env_cfg::type_id::create("m_rom_ctrl_env_cfg");
@@ -142,6 +171,16 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     `uvm_field_object(debugger,               UVM_DEFAULT)
   `uvm_object_utils_end
 
+  function void post_randomize();
+    if (m_jtag_riscv_agent_cfg.use_jtag_dmi) begin
+      if (!m_jtag_agent_cfg.randomize())
+        `uvm_fatal(get_name(), "Failed to randomize m_jtag_agent_cfg")
+      if (!m_jtag_dtm_ral.randomize())
+        `uvm_fatal(get_name(), "Failed to randomize m_jtag_dtm_ral")
+      if (!jtag_dmi_ral.randomize())
+        `uvm_fatal(get_name(), "Failed to randomize jtag_dmi_ral")
+    end
+  endfunction
 
   virtual function void initialize(bit inherit_ral_models = 1'b0);
     list_of_alerts = chip_common_pkg::LIST_OF_ALERTS;
