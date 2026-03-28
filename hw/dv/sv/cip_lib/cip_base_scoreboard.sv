@@ -683,9 +683,11 @@ class cip_base_scoreboard #(type RAL_T = dv_base_reg_block,
       end
 
       if (item.d_error != exp_d_error) begin
-        string reasons[$];
+        string reasons_desc;
 
         if (exp_d_error) begin
+          string reasons[$];
+
           if (unmapped_err && !block.get_unmapped_access_ok()) begin
             reasons.push_back("Unmapped address");
           end
@@ -706,16 +708,18 @@ class cip_base_scoreboard #(type RAL_T = dv_base_reg_block,
           if (instr_type_err) reasons.push_back("MuBi error in instr-type");
           if (ecc_err) reasons.push_back("Access to address with known-bad ECC");
           if (csr_fetch_err) reasons.push_back("Fetch from CSR");
+
+          reasons_desc = $sformatf("Reasons for predicted error: %0p.", reasons);
         end
 
         `uvm_error(get_full_name(),
-                   $sformatf({"On interface %0s, item had unexpected d_error value",
+                   $sformatf({"On interface %0s, item had unexpected d_error value ",
                               "(predicted %0d, but saw %0d).\n",
-                              " TL item was: %0s",
-                              " Reasons for predicted error: %0p."},
+                              " TL item was: %0s.",
+                              "%0s"},
                              ral_name, exp_d_error, item.d_error,
                              item.sprint(uvm_default_line_printer),
-                             reasons))
+                             (reasons_desc == "") ? "" : {" ", reasons_desc}))
       end
 
       // In data read phase, check d_data when d_error = 1.
