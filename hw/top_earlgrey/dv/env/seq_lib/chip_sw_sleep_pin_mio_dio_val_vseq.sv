@@ -74,54 +74,107 @@ class chip_sw_sleep_pin_mio_dio_val_vseq extends chip_sw_base_vseq;
     end
   endtask : receive_chosen_values
 
+  // Check the retention value for a single pad (with current value and pu/pd values passed in as
+  // arguments, to allow mios_if and dios_if to be differently parameterised)
+  //
+  // Returns 1 on a match. On a failure, prints out an informative error message and returns 0.
+  local function bit check_single_pad_retention(string    pin_desc,
+                                                pad_ret_t pin_cfg,
+                                                logic     observed,
+                                                bit       pu,
+                                                bit       pd);
+    logic  expected;
+    string exp_desc;
+    bit    has_prediction;
+
+    case (pin_cfg)
+      Ret0: begin
+        expected = 1'b0;
+        exp_desc = "pad driven to 0 when in retention";
+        has_prediction = 1'b1;
+      end
+      Ret1: begin
+        expected = 1'b1;
+        exp_desc = "pad driven to 1 when in retention";
+        has_prediction = 1'b1;
+      end
+      HighZ: begin
+        string pulls[$];
+
+        expected = 1'bz;
+
+        if (pd) begin
+          pulls.push_back("pull-down");
+          expected = 1'b0;
+        end
+        if (pu) begin
+          pulls.push_back("pull-up");
+          expected = (expected === 1'bz) ? 1'b1 : 1'bx;
+        end
+
+        exp_desc = $sformatf("pad in high-Z mode, with the following pulls asserted: %p", pulls);
+        has_prediction = 1'b1;
+      end
+      RetP, RetSkip: ;
+      default: `uvm_fatal(`gfn, "Invalid choice!")
+    endcase
+
+    if (observed !== expected) begin
+      `uvm_error(get_name(),
+                 $sformatf({"Pad retention mismatch for %0s. ",
+                            "Expected %0p but saw %0p. ",
+                            "Reason for expected behaviour: %0s"},
+                           pin_desc, expected, observed, exp_desc))
+    end
+
+    return observed === expected;
+  endfunction
+
+
   // Checks the retention values of all eligible MIO and DIO pads.
   //
-  // The eligibility for check is determined by the members mio_pad_ret and dio_pad_ret fetched from
-  // the SW test.
-  function void check_pad_retention_out();
-    for (int i = 0; i < top_earlgrey_pkg::MioPadCount; i++) begin
-      string msg = $sformatf("for MIO[%0d]", i);
+  // The expected behaviour is determined from the members mio_pad_ret and dio_pad_ret that were
+  // fetched from the SW test.
+  function bit check_pad_retention_out();
+    int unsigned num_mismatches = 0;
 
-      case (mio_pad_ret[i])
-        Ret0: `DV_CHECK_CASE_EQ(cfg.chip_vif.mios_if.pins[i], 1'b0, msg)
-        Ret1: `DV_CHECK_CASE_EQ(cfg.chip_vif.mios_if.pins[i], 1'b1, msg)
-        HighZ: begin
-          logic exp = 1'bz;
-          if (cfg.chip_vif.mios_if.pins_pd[i]) exp = 0;
-          if (cfg.chip_vif.mios_if.pins_pu[i]) exp = 1;
-          `DV_CHECK_CASE_EQ(cfg.chip_vif.mios_if.pins[i], exp, msg)
-        end
-        RetP, RetSkip: ;
-        default: `uvm_fatal(`gfn, "Invalid choice!")
-      endcase
+    for (int i = 0; i < top_earlgrey_pkg::MioPadCount; i++) begin
+      if (!check_single_pad_retention($sformatf("MIO[%0d]", i),
+                                      mio_pad_ret[i],
+                                      cfg.chip_vif.mios_if.pins[i],
+                                      cfg.chip_vif.mios_if.pins_pu[i],
+                                      cfg.chip_vif.mios_if.pins_pd[i])) begin
+        num_mismatches++;
+      end
     end
 
     for (int i = 0; i < top_earlgrey_pkg::DioCount; i++) begin
-      string msg = $sformatf("for DIO[%0d]", i);
       // Note that dios_if enumerates the DIOs in chip_earlgrey_asic, which is different from the
       // DIOs enumerated in pinmux. The former is provided by top_earlgrey_pkg::dio_pad_e and the
       // latter, by top_earlgrey_pkg::dio_e. The chip_common_pkg::DioToDioPadMap maps the pinmux's
       // enumeration to the chip level's enumeration.
       int mapped_idx = DioToDioPadMap[i];
 
-      case (dio_pad_ret[i])
-        Ret0: `DV_CHECK_CASE_EQ(cfg.chip_vif.dios_if.pins[mapped_idx], 1'b0, msg)
-        Ret1: `DV_CHECK_CASE_EQ(cfg.chip_vif.dios_if.pins[mapped_idx], 1'b1, msg)
-        HighZ: begin
-          logic exp = 1'bz;
-          if (cfg.chip_vif.dios_if.pins_pd[mapped_idx]) exp = 0;
-          if (cfg.chip_vif.dios_if.pins_pu[mapped_idx]) exp = 1;
-          `DV_CHECK_CASE_EQ(cfg.chip_vif.dios_if.pins[mapped_idx], exp, msg)
-        end
-        RetP, RetSkip: ;
-        default: `uvm_fatal(`gfn, "Invalid choice!")
-      endcase
+      if (!check_single_pad_retention($sformatf("DIO[%0d]", i),
+                                      dio_pad_ret[i],
+                                      cfg.chip_vif.dios_if.pins[mapped_idx],
+                                      cfg.chip_vif.dios_if.pins_pu[mapped_idx],
+                                      cfg.chip_vif.dios_if.pins_pd[mapped_idx])) begin
+        num_mismatches++;
+      end
     end
+
+    if (num_mismatches) begin
+      `uvm_error(get_name(), $sformatf("Saw %0d mismatches in IO pads", num_mismatches))
+    end
+
+    return (num_mismatches == 0);
   endfunction : check_pad_retention_out
 
   task check_pads_retention_type();
     logic [top_earlgrey_pkg::MioPadCount-1:0] mio_pads;
     logic [top_earlgrey_pkg::DioCount-1:0]    dio_pads;
+    int unsigned                              num_bad_cfgs;
 
     // How to check 0, 1, High-Z
     //
@@ -141,7 +194,7 @@ class chip_sw_sleep_pin_mio_dio_val_vseq extends chip_sw_base_vseq;
     cfg.chip_vif.mios_if.pins_pd = '0;
     cfg.chip_vif.mios_if.pins_pu = '0;
     @(cfg.chip_vif.pwrmgr_low_power_if.cb);
-    check_pad_retention_out();
+    if (!check_pad_retention_out()) num_bad_cfgs++;
 
     // Pull-down then check
     `uvm_info(`gfn, "Testing Retention Outputs with Pull-down", UVM_LOW)
@@ -150,7 +203,7 @@ class chip_sw_sleep_pin_mio_dio_val_vseq extends chip_sw_base_vseq;
     cfg.chip_vif.mios_if.pins_pd = '1;
     cfg.chip_vif.mios_if.pins_pu = '0;
     @(cfg.chip_vif.pwrmgr_low_power_if.cb);
-    check_pad_retention_out();
+    if (!check_pad_retention_out()) num_bad_cfgs++;
 
     // Pull-up then check
     `uvm_info(`gfn, "Testing Retention Outputs with Pull-up", UVM_LOW)
@@ -159,7 +212,12 @@ class chip_sw_sleep_pin_mio_dio_val_vseq extends chip_sw_base_vseq;
     cfg.chip_vif.mios_if.pins_pd = '0;
     cfg.chip_vif.mios_if.pins_pu = '1;
     @(cfg.chip_vif.pwrmgr_low_power_if.cb);
-    check_pad_retention_out();
+    if (!check_pad_retention_out()) num_bad_cfgs++;
+
+    if (num_bad_cfgs > 0) begin
+      `uvm_error(get_name(),
+                 $sformatf("Saw %0d pull-up/down mismatching configurations.", num_bad_cfgs))
+    end
   endtask : check_pads_retention_type
 
   virtual task body();
@@ -168,10 +226,10 @@ class chip_sw_sleep_pin_mio_dio_val_vseq extends chip_sw_base_vseq;
     // Wait until we reach the SW test state.
     `DV_WAIT(cfg.sw_test_status_vif.sw_test_status == SwTestStatusInTest)
 
-    // TODO: Get expected MIO DIO value from SW
+    // Get expected MIO/DIO values from SW
     receive_chosen_values();
 
-    // Wait until Chip enters Low Power Mode
+    // Wait until chip enters Low Power Mode
     wait (cfg.chip_vif.pwrmgr_low_power_if.in_sleep);
     @(cfg.chip_vif.pwrmgr_low_power_if.cb);
 
