@@ -130,6 +130,26 @@ void configure_pad_retention_types(dif_pinmux_t *pinmux) {
     dif_pinmux_pad_kind_t type;
     CHECK_DIF_OK(dif_pinmux_pad_from_dt_pad(pad, &index, &type));
     CHECK_DIF_OK(dif_pinmux_pad_sleep_enable(pinmux, index, type, kPads[pad]));
+
+    // This test works by configuring the sleep-mode outputs for various pads
+    // (DIO or MIO), then entering sleep and letting the DV side of the test
+    // (chip_sw_sleep_pin_mio_dio_val_vseq) check that the pads are driven as
+    // expected.
+    //
+    // One possible mode is "HighZ", where the output-enable signals from pinmux
+    // are zero and the DV side wants to check that the signal does indeed stop
+    // being driven. To make *that* work, the associated pad attribute needs its
+    // kDifPinmuxPadAttrPullResistorEnable to be zero: if it isn't, the pad will
+    // be pulled up or down. Rather than doing a complicated read-modify-write,
+    // clear the entire pad attribute to zero
+    if (kPads[pad] == kDifPinmuxSleepModeHighZ) {
+      dif_pinmux_pad_attr_t out_attr;
+      dif_pinmux_pad_attr_t in_attr = {0};
+      CHECK_DIF_OK(
+          dif_pinmux_pad_write_attrs_dt(pinmux, pad, in_attr, &out_attr));
+
+      LOG_INFO("clearing pad attribute for pad %d (index %d; type %0d)", pad, index, type);
+    }
   }
 
   LOG_INFO("PADs retention modes are configured.");
@@ -181,12 +201,9 @@ bool test_main(void) {
     bool deepsleep = (deep_powerdown_en) ? true : false;
 
 #if defined(OPENTITAN_IS_EARLGREY)
-    // TODO(lowrisc/opentitan#15889): The weak pull on IOC3 needs to be
-    // disabled for this test. Remove this later.
     dif_pinmux_pad_attr_t out_attr;
     dif_pinmux_pad_attr_t in_attr = {0};
-    CHECK_DIF_OK(
-        dif_pinmux_pad_write_attrs_dt(&pinmux, kDtPadIoc3, in_attr, &out_attr));
+
     // The JTAG TAP strap pads IOC5 (tap1) and IOC8 (tap0) carry an internal
     // pull (IOC8 is configured with a pull-down during boot). If the test
     // happens to select the High-Z retention mode for one of these pads, that
