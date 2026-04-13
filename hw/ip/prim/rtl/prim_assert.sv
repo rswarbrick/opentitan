@@ -20,18 +20,20 @@
 // Converts an arbitrary block of code into a Verilog string
 `define PRIM_STRINGIFY(__x) `"__x`"
 
-// ASSERT_ERROR logs an error message with either `uvm_error or with $error.
+// REPORT_ERROR logs an error message with either `uvm_error or with $error.
 //
-// This somewhat duplicates `DV_ERROR macro defined in hw/dv/sv/dv_utils/dv_macros.svh. The reason
-// for redefining it here is to avoid creating a dependency.
-`define ASSERT_ERROR(__name)                                                             \
-`ifdef UVM                                                                               \
-  uvm_pkg::uvm_report_error("ASSERT FAILED", `PRIM_STRINGIFY(__name), uvm_pkg::UVM_NONE, \
-                            `__FILE__, `__LINE__, "", 1);                                \
-`else                                                                                    \
-  $error("%0t: (%0s:%0d) [%m] [ASSERT FAILED] %0s", $time, `__FILE__, `__LINE__,         \
-         `PRIM_STRINGIFY(__name));                                                       \
+// This somewhat duplicates the `dv_error macro defined in hw/dv/sv/dv_utils/dv_macros.svh. The
+// reason for redefining it here is to avoid creating a dependency.
+`define REPORT_ERROR(err_type, msg)                                                              \
+`ifdef UVM                                                                                       \
+  uvm_pkg::uvm_report_error((err_type), (msg), uvm_pkg::UVM_NONE, `__FILE__, `__LINE__, "", 1);  \
+`else                                                                                            \
+  $error("%0t: (%0s:%0d) [%m] [%0s] %0s", $time, `__FILE__, `__LINE__, (err_type), (msg));       \
 `endif
+
+// ASSERT_ERROR reports the failure of the named assertion
+`define ASSERT_ERROR(__name) \
+  `REPORT_ERROR("ASSERT FAILED", `PRIM_STRINGIFY(__name))
 
 // This macro is suitable for conditionally triggering lint errors, e.g., if a Sec parameter takes
 // on a non-default value. This may be required for pre-silicon/FPGA evaluation but we don't want
