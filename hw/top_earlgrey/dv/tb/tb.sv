@@ -563,63 +563,66 @@ module tb;
   end
 
   if (1) begin : gen_rv_dm
+`define RV_DM_PATH dut.top_earlgrey.earlgrey_pd_main.u_rv_dm
+
     wire clk, rst_n, clk_lc, rst_lc_n;
-    assign clk = dut.top_earlgrey.u_rv_dm.clk_i;
-    assign rst_n = dut.top_earlgrey.u_rv_dm.rst_ni;
-    assign clk_lc = dut.top_earlgrey.u_rv_dm.clk_lc_i;
-    assign rst_lc_n = dut.top_earlgrey.u_rv_dm.rst_lc_ni;
+    assign clk      = `RV_DM_PATH.clk_i;
+    assign rst_n    = `RV_DM_PATH.rst_ni;
+    assign clk_lc   = `RV_DM_PATH.clk_lc_i;
+    assign rst_lc_n = `RV_DM_PATH.rst_lc_ni;
 
     clk_rst_if clk_rst_if (.clk (clk), .rst_n (rst_n));
     clk_rst_if clk_lc_rst_if (.clk(clk_lc), .rst_n(rst_lc_n));
 
-    rv_dm_if rv_dm_if(.clk (clk), .rst_n (rst_n));
+    // Bind a copy of rv_dm_if into the rv_dm block in the design.
+    bind `RV_DM_PATH rv_dm_if u_rv_dm_if(.clk (clk_i), .rst_n (rst_ni));
+
     rv_dm_mode_if mode_if(.clk(clk));
-
     assign mode_if.is_active = 1'b0;
-    assign mode_if.next_dm_addr             = dut.top_earlgrey.u_rv_dm.next_dm_addr_i;
-    assign mode_if.lc_hw_debug_clr          = dut.top_earlgrey.u_rv_dm.lc_hw_debug_clr_i;
-    assign mode_if.lc_hw_debug_en           = dut.top_earlgrey.u_rv_dm.lc_hw_debug_en_i;
-    assign mode_if.lc_dft_en                = dut.top_earlgrey.u_rv_dm.lc_dft_en_i;
-    assign mode_if.pinmux_hw_debug_en       = dut.top_earlgrey.u_rv_dm.pinmux_hw_debug_en_i;
-    assign mode_if.lc_check_byp_en          = dut.top_earlgrey.u_rv_dm.lc_check_byp_en_i;
-    assign mode_if.lc_escalate_en           = dut.top_earlgrey.u_rv_dm.lc_escalate_en_i;
-    assign mode_if.lc_init_done             = dut.top_earlgrey.u_rv_dm.lc_init_done_i;
-    assign mode_if.strap_en                 = dut.top_earlgrey.u_rv_dm.strap_en_i;
-    assign mode_if.strap_en_override        = dut.top_earlgrey.u_rv_dm.strap_en_override_i;
-    assign mode_if.otp_dis_rv_dm_late_debug = dut.top_earlgrey.u_rv_dm.otp_dis_rv_dm_late_debug_i;
-    assign mode_if.scanmode                 = dut.top_earlgrey.u_rv_dm.scanmode_i;
+    assign mode_if.next_dm_addr             = `RV_DM_PATH.next_dm_addr_i;
+    assign mode_if.lc_hw_debug_clr          = `RV_DM_PATH.lc_hw_debug_clr_i;
+    assign mode_if.lc_hw_debug_en           = `RV_DM_PATH.lc_hw_debug_en_i;
+    assign mode_if.lc_dft_en                = `RV_DM_PATH.lc_dft_en_i;
+    assign mode_if.pinmux_hw_debug_en       = `RV_DM_PATH.pinmux_hw_debug_en_i;
+    assign mode_if.lc_check_byp_en          = `RV_DM_PATH.lc_check_byp_en_i;
+    assign mode_if.lc_escalate_en           = `RV_DM_PATH.lc_escalate_en_i;
+    assign mode_if.lc_init_done             = `RV_DM_PATH.lc_init_done_i;
+    assign mode_if.strap_en                 = `RV_DM_PATH.strap_en_i;
+    assign mode_if.strap_en_override        = `RV_DM_PATH.strap_en_override_i;
+    assign mode_if.otp_dis_rv_dm_late_debug = `RV_DM_PATH.otp_dis_rv_dm_late_debug_i;
+    assign mode_if.scanmode                 = `RV_DM_PATH.scanmode_i;
 
-    assign rv_dm_if.is_active = 1'b0;
-    assign rv_dm_if.scan_rst_n   = dut.top_earlgrey.u_rv_dm.scan_rst_ni;
-    assign rv_dm_if.ndmreset_req = dut.top_earlgrey.u_rv_dm.ndmreset_req_o;
-    assign rv_dm_if.dmactive     = dut.top_earlgrey.u_rv_dm.dmactive_o;
-    assign rv_dm_if.debug_req    = dut.top_earlgrey.u_rv_dm.debug_req_o;
-    assign rv_dm_if.unavailable  = dut.top_earlgrey.u_rv_dm.unavailable_i;
+    assign `RV_DM_PATH.u_rv_dm_if.is_active = 1'b0;
+    assign `RV_DM_PATH.u_rv_dm_if.scan_rst_n   = `RV_DM_PATH.scan_rst_ni;
+    assign `RV_DM_PATH.u_rv_dm_if.ndmreset_req = `RV_DM_PATH.ndmreset_req_o;
+    assign `RV_DM_PATH.u_rv_dm_if.dmactive     = `RV_DM_PATH.dmactive_o;
+    assign `RV_DM_PATH.u_rv_dm_if.debug_req    = `RV_DM_PATH.debug_req_o;
+    assign `RV_DM_PATH.u_rv_dm_if.unavailable  = `RV_DM_PATH.unavailable_i;
 
     tl_if regs_tl_if(.clk(clk), .rst_n(rst_n));
     tl_if mem_tl_if(.clk(clk), .rst_n(rst_n));
     tl_if sba_tl_if(.clk(clk), .rst_n(rst_n));
 
     assign regs_tl_if.if_mode = Monitor;
-    assign regs_tl_if.h2d = dut.top_earlgrey.u_rv_dm.regs_tl_d_i;
-    assign regs_tl_if.d2h = dut.top_earlgrey.u_rv_dm.regs_tl_d_o;
+    assign regs_tl_if.h2d = `RV_DM_PATH.regs_tl_d_i;
+    assign regs_tl_if.d2h = `RV_DM_PATH.regs_tl_d_o;
 
     assign mem_tl_if.if_mode = Monitor;
-    assign mem_tl_if.h2d = dut.top_earlgrey.u_rv_dm.mem_tl_d_i;
-    assign mem_tl_if.d2h = dut.top_earlgrey.u_rv_dm.mem_tl_d_o;
+    assign mem_tl_if.h2d = `RV_DM_PATH.mem_tl_d_i;
+    assign mem_tl_if.d2h = `RV_DM_PATH.mem_tl_d_o;
 
     assign sba_tl_if.if_mode = Monitor;
-    assign sba_tl_if.h2d = dut.top_earlgrey.u_rv_dm.sba_tl_h_i;
-    assign sba_tl_if.d2h = dut.top_earlgrey.u_rv_dm.sba_tl_h_o;
+    assign sba_tl_if.h2d = `RV_DM_PATH.sba_tl_h_i;
+    assign sba_tl_if.d2h = `RV_DM_PATH.sba_tl_h_o;
 
     jtag_if jtag_if();
 
     assign jtag_if.is_active = 1'b0;
-    assign jtag_if.tck    = dut.top_earlgrey.u_rv_dm.jtag_i.tck;
-    assign jtag_if.trst_n = dut.top_earlgrey.u_rv_dm.jtag_i.trst_n;
-    assign jtag_if.tms    = dut.top_earlgrey.u_rv_dm.jtag_i.tms;
-    assign jtag_if.tdi    = dut.top_earlgrey.u_rv_dm.jtag_i.tdi;
-    assign jtag_if.tdo    = dut.top_earlgrey.u_rv_dm.jtag_o.tdo;
+    assign jtag_if.tck    = `RV_DM_PATH.jtag_i.tck;
+    assign jtag_if.trst_n = `RV_DM_PATH.jtag_i.trst_n;
+    assign jtag_if.tms    = `RV_DM_PATH.jtag_i.tms;
+    assign jtag_if.tdi    = `RV_DM_PATH.jtag_i.tdi;
+    assign jtag_if.tdo    = `RV_DM_PATH.jtag_o.tdo;
 
     // Register the various interfaces so that they can be picked up by the passive rv_dm
     // environment.
@@ -628,7 +631,7 @@ module tb;
       automatic string jtag_agent_path = {env_path, ".m_jtag_agent"};
       automatic string mode_agent_path = {env_path, ".m_mode_agent"};
 
-      uvm_config_db#(virtual rv_dm_if)::set(null, env_path, "rv_dm_vif", rv_dm_if);
+      uvm_config_db#(virtual rv_dm_if)::set(null, env_path, "rv_dm_vif", `RV_DM_PATH.u_rv_dm_if);
       uvm_config_db#(virtual rv_dm_mode_if)::set(null, mode_agent_path, "vif", mode_if);
 
       uvm_config_db#(virtual clk_rst_if)::set(null, env_path, "clk_lc_rst_vif", clk_lc_rst_if);
@@ -656,6 +659,8 @@ module tb;
       // alert agent and run it in passive mode).
       uvm_config_db#(virtual alert_esc_if)::set(null, {env_path, ".m_alert_agent_fatal_fault"},
                                                 "vif", alert_if[TopEarlgreyAlertIdRvDmFatalFault]);
+
+`undef RV_DM_PATH
     end
   end
 
