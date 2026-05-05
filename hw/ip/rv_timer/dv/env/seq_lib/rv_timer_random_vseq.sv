@@ -188,20 +188,48 @@ class rv_timer_random_vseq extends rv_timer_base_vseq;
                           ((mtime_dif % step[hart]) != 0)) * (prescale[hart] +1) + 1;
   endfunction : calculate_num_clks
 
-  // Configure all timers and harts based on rand fields.
-  task cfg_all_timers();
-    for (int i = 0; i < NUM_HARTS; i++) begin
-      cfg_hart(.hart(i), .prescale(prescale[i]), .step(step[i]));
+  // Configure the timers of the given hart based on fields in the class
+  //
+  // Exit early on reset.
+  task configure_timers_for_hart(int unsigned hart);
+    `uvm_info(get_full_name(),
+              $sformatf("Configuring timers for hart %0d: prescale=%0d, step=%0d, timer_val=%0d",
+                        hart, prescale[hart], step[hart], timer_val[hart]),
+              UVM_MEDIUM)
+
+    cfg_hart(.hart(hart), .prescale(prescale[hart]), .step(step[hart]));
+    if (cfg.under_reset) return;
+
+    set_timer_val(.hart(hart), .val(timer_val[hart]));
+    if (cfg.under_reset) return;
+
+    for (int tmr = 0; tmr < NUM_TIMERS; tmr++) begin
+      `uvm_info(get_full_name(),
+                $sformatf("Configuring timer %0d for hart %0d: compare_val=%0d, interrupt %0s",
+                          tmr, hart,
+                          compare_val[hart][tmr],
+                          en_interrupt[hart][tmr] ? "enabled" : "disabled"),
+                UVM_MEDIUM)
+
+      set_compare_val(.hart(hart), .timer(tmr), .val(compare_val[hart][tmr]));
       if (cfg.under_reset) return;
-      set_timer_val(.hart(i), .val(timer_val[i]));
+
+      cfg_interrupt(.hart(hart), .timer(tmr), .enable(en_interrupt[hart][tmr]));
       if (cfg.under_reset) return;
-      for (int j = 0; j < NUM_TIMERS; j++) begin
-        set_compare_val(.hart(i), .timer(j), .val(compare_val[i][j]));
-        if (cfg.under_reset) return;
-        cfg_interrupt(.hart(i), .timer(j), .enable(en_interrupt[i][j]));
-        if (cfg.under_reset) return;
-      end
     end
+  endtask
+
+  // Configure all timers and harts based on fields in the class.
+  task cfg_all_timers();
+    fork : isolation_fork begin
+      for (int i = 0; i < NUM_HARTS; i++) begin
+        automatic int hart_ = i;
+        fork
+          configure_timers_for_hart(hart_);
+        join_none
+      end
+      wait fork;
+    end join
   endtask : cfg_all_timers
 
 endclass : rv_timer_random_vseq
