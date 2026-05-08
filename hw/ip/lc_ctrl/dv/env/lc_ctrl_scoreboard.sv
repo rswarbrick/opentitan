@@ -609,7 +609,7 @@ class lc_ctrl_scoreboard extends cip_base_scoreboard #(
   // this function check if the triggered alert is expected
   // to turn off this check, user can set `do_alert_check` to 0
   // We overload this to trigger events in the config object when an alert is triggered
-  virtual function void process_alert(string alert_name, alert_esc_seq_item item);
+  virtual function void process_alert(string alert_name, alert_seq_item item);
     if (item.alert_handshake_sta == AlertReceived) begin
       case (alert_name)
         "fatal_prog_error": begin
