@@ -57,6 +57,7 @@ task alert_sender_ping_rsp_seq::default_rsp_thread();
             m_txn_type     == m_txn_type;
             m_ping_timeout == 0;
             cfg.ack_delay_min <= m_ack_delay && m_ack_delay <= cfg.ack_delay_max;
+            cfg.alert_delay_min <= m_alert_delay && m_alert_delay <= cfg.alert_delay_max;
           }) begin
         `uvm_error(get_full_name(), "Failed to randomize rsp")
       end
