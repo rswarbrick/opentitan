@@ -33,7 +33,7 @@ task esc_receiver_base_seq::body();
   if (!req.randomize() with {
         r_esc_rsp          == local::r_esc_rsp;
         standalone_int_err == local::standalone_int_err;
-        ping_timeout       == local::ping_timeout;
+        m_ping_timeout     == local::ping_timeout;
 
         // If int_err is true, override the soft constraint in the sequence item and request a
         // nonzero time with an error.
@@ -45,8 +45,8 @@ task esc_receiver_base_seq::body();
   end
 
   `uvm_info(get_full_name(),
-            $sformatf("seq_item: m_int_err_cyc=%0b, ping_timeout=%0b",
-                      req.m_int_err_cyc, req.ping_timeout),
+            $sformatf("seq_item: m_int_err_cyc=%0b, m_ping_timeout=%0b",
+                      req.m_int_err_cyc, req.m_ping_timeout),
             UVM_MEDIUM)
 
   finish_item(req);

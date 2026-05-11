@@ -57,7 +57,7 @@ task alert_sender_ping_rsp_seq::default_rsp_thread();
       `DV_CHECK_RANDOMIZE_WITH_FATAL(rsp,
                                      s_alert_send     == local::s_alert_send;
                                      s_alert_ping_rsp == local::s_alert_ping_rsp;
-                                     ping_timeout     == 0;
+                                     m_ping_timeout   == 0;
                                      )
       finish_item(rsp);
       get_response(rsp);
