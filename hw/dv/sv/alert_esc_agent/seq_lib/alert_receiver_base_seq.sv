@@ -30,6 +30,7 @@ task alert_receiver_base_seq::body();
   if (!req.randomize() with {
         m_txn_type == local::m_txn_type;
         cfg.ack_delay_min <= m_ack_delay && m_ack_delay <= cfg.ack_delay_max;
+        cfg.ack_stable_min <= m_ack_stable && m_ack_stable <= cfg.ack_stable_max;
       }) begin
     `uvm_fatal(get_full_name(), "Failed to randomize req")
   end
