@@ -44,7 +44,6 @@ interface chip_if;
 `define ADC_CTRL_HIER       `PD_AON_HIER.u_adc_ctrl
 `define AES_HIER            `PD_MAIN_HIER.u_aes
 `define AES_CONTROL_HIER    `AES_HIER.u_aes_core.u_aes_control
-`define ALERT_HANDLER_HIER  `PD_MAIN_HIER.u_alert_handler
 `define AON_TIMER_HIER      `PD_AON_HIER.u_aon_timer
 `define CLKMGR_HIER         `PD_AON_HIER.u_clkmgr
 `define CPU_HIER            `PD_MAIN_HIER.u_rv_core_ibex
@@ -660,15 +659,6 @@ interface chip_if;
 `endif
   endtask
 
-  // alert_esc_if alert_if[NUM_ALERTS](.clk  (`ALERT_HANDLER_HIER.clk_i),
-  //                                   .rst_n(`ALERT_HANDLER_HIER.rst_ni));
-  // for (genvar i = 0; i < NUM_ALERTS; i++) begin : gen_alert_rx_conn
-  //   assign alert_if[i].alert_rx = `ALERT_HANDLER_HIER.alert_rx_o[i];
-  // end
-
-  alerts_if alerts_if(.clk(`ALERT_HANDLER_HIER.clk_i), .rst_ni(`ALERT_HANDLER_HIER.rst_ni),
-                      .alerts(`ALERT_HANDLER_HIER.alert_trig));
-
   // TODO: use pwrmgr_low_power, internal aon clk / rst monitor instead.
   pwrmgr_low_power_if pwrmgr_low_power_if(
 `ifdef GATE_LEVEL
@@ -930,14 +920,8 @@ interface chip_if;
   initial begin
     // TODO: Update once jtag_riscv_agent is replaced with jtag_dmi_agent / SBA accessor.
     uvm_config_db#(virtual jtag_if)::set(null, "*.env.m_jtag_riscv_agent*", "vif", jtag_if);
-
     uvm_config_db#(virtual tl_if)::set(
         null, "*.env.m_tl_agent_chip_reg_block*", "vif", cpu_d_tl_if);
-
-    // foreach (alert_if[i]) begin
-    //   uvm_config_db#(virtual alert_esc_if)::set(null, $sformatf("*.env.m_alert_agent_%0s",
-    //       LIST_OF_ALERTS[i]), "vif", alert_if[i]);
-    // end
   end
 
   // Helper methods.
@@ -1076,10 +1060,6 @@ interface chip_if;
       @(negedge `OTP_CTRL_HIER.clk_i);
     end
   endtask
-
-  // Signal probe function for wait cycle mask in alert handler.
-  `DV_CREATE_SIGNAL_PROBE_FUNCTION(signal_probe_alert_handler_ping_timer_wait_cyc_mask_i,
-      `ALERT_HANDLER_HIER.u_ping_timer.wait_cyc_mask_i)
 
   // Signal probe function for keymgr key state.
   // TODO(#30907): Decide if we need this probing function (only used in alert handler escalation
@@ -1259,7 +1239,6 @@ assign spi_host_1_state = {tb.dut.top_earlgrey.earlgrey_pd_main.u_spi_host1.u_sp
 `undef ADC_CTRL_HIER
 `undef AES_HIER
 `undef AES_CONTROL_HIER
-`undef ALERT_HANDLER_HIER
 `undef AON_TIMER_HIER
 `undef AST_HIER
 `undef CLKMGR_HIER

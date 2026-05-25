@@ -12,7 +12,7 @@ class chip_sw_alert_handler_lpg_clkoff_vseq extends chip_sw_base_vseq;
     // In DV, we force the wait-time to known fixed value so that the alert handler's ping mechanism
     // is able to hit all blocks within a reasonable amount of simulated / wall clock time. We pick
     // 7 which is the minimum-allowed value.
-    void'(cfg.chip_vif.signal_probe_alert_handler_ping_timer_wait_cyc_mask_i(SignalProbeForce, 7));
+    void'(cfg.alerts_vif.signal_probe_ping_timer_wait_cyc_mask_i(SignalProbeForce, 7));
     super.pre_start();
   endtask
 

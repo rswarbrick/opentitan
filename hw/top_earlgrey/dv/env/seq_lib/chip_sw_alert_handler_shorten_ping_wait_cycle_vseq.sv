@@ -15,7 +15,7 @@ class chip_sw_alert_handler_shorten_ping_wait_cycle_vseq extends chip_sw_base_vs
     //
     // The minimum-allowed value,7, is chosen here to use only the least-significant 3 bits of
     // the LFSR output as the wait-time between two ping requests.
-    void'(cfg.chip_vif.signal_probe_alert_handler_ping_timer_wait_cyc_mask_i(SignalProbeForce, 7));
+    void'(cfg.alerts_vif.signal_probe_ping_timer_wait_cyc_mask_i(SignalProbeForce, 7));
     super.pre_start();
   endtask
 
