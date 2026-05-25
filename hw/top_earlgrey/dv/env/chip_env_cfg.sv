@@ -21,6 +21,10 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
   // chip top interfaces
   virtual chip_if       chip_vif;
 
+  // An interface that is bound into the alert_handler instance and can be used to access alerts
+  // that are reported to the alert_handler.
+  virtual alerts_if     alerts_vif;
+
   // Indicates which clock source to use for chip simulations.
   chip_clock_source_e   chip_clock_source;
 

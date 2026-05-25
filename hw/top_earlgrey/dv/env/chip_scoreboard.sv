@@ -45,9 +45,9 @@ class chip_scoreboard #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_b
 
   virtual task process_alerts_for_cov();
     int alert_cg_size = 0;
-    forever @cfg.chip_vif.alerts_if.alerts_cb.alerts begin
-      foreach (cfg.chip_vif.alerts_if.alerts_cb.alerts[i]) begin
-        if (cfg.chip_vif.alerts_if.alerts_cb.alerts[i]) cov.alert_cg_wrap[i].sample(1'b1);
+    forever @cfg.alerts_vif.alerts_cb.alerts begin
+      foreach (cfg.alerts_vif.alerts_cb.alerts[i]) begin
+        if (cfg.alerts_vif.alerts_cb.alerts[i]) cov.alert_cg_wrap[i].sample(1'b1);
       end
     end
   endtask
