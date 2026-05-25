@@ -379,8 +379,7 @@ class chip_base_vseq #(
     bit shorten_ping_en;
     void'($value$plusargs("shorten_ping_en=%0d", shorten_ping_en));
     if (shorten_ping_en) begin
-      void'(cfg.chip_vif.signal_probe_alert_handler_ping_timer_wait_cyc_mask_i(
-          SignalProbeForce, 16'h3F));
+      void'(cfg.alerts_vif.signal_probe_ping_timer_wait_cyc_mask_i(SignalProbeForce, 16'h3f));
     end
   endtask : alert_ping_en_shorten
 

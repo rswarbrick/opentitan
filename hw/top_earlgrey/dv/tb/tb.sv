@@ -416,6 +416,10 @@ module tb;
     .*
   );
 
+  // Bind an alerts_if instance into the (single) alert_handler. This interface is used to collect
+  // the alerts that have been seen by the alert_handler's prim_alert_receiver instances.
+  bind alert_handler alerts_if alerts_if (.clk_i, .rst_ni);
+
   initial begin
     // IO Interfaces
     uvm_config_db#(virtual chip_if)::set(null, "*.env", "chip_vif", dut.chip_if);
@@ -448,6 +452,11 @@ module tb;
         null, "uvm_test_top", "i3c0_num_targets", dut.top_earlgrey.I3c0NumTargets);
     uvm_config_db#(int unsigned)::set(
         null, "uvm_test_top", "i3c1_num_targets", dut.top_earlgrey.I3c1NumTargets);
+
+    // Per-block interfaces that are bound into specific places in the chip
+    uvm_config_db#(virtual alerts_if)::set(
+        null, "*.env", "alerts_vif",
+        dut.top_earlgrey.earlgrey_pd_main.u_alert_handler.alerts_if);
 
     // Format time in microseconds losing no precision. The added "." makes it easier to determine
     // the order of magnitude without counting digits, as is needed if it was formatted as ps or ns.
