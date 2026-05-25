@@ -35,6 +35,10 @@ class chip_env extends cip_base_env #(
       `uvm_fatal(`gfn, "failed to get chip_vif from uvm_config_db")
     end
 
+    if (!uvm_config_db#(virtual alerts_if)::get(this, "", "alerts_vif", cfg.alerts_vif)) begin
+      `uvm_fatal(get_full_name(), "Failed to get alerts_vif from uvm_config_db.")
+    end
+
     // Set tl_agent's is_active bit based on the stub_cpu value.
     cfg.m_tl_agent_cfg.is_active = cfg.chip_vif.stub_cpu;
 
