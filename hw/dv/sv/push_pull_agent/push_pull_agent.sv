@@ -36,7 +36,7 @@ class push_pull_agent #(
 
   function void connect_phase(uvm_phase phase);
     super.connect_phase(phase);
-    if (cfg.if_mode == dv_utils_pkg::Device) begin
+    if (cfg.is_active && cfg.if_mode == dv_utils_pkg::Device) begin
       monitor.req_analysis_port.connect(sequencer.req_analysis_fifo.analysis_export);
     end
   endfunction
@@ -45,7 +45,7 @@ class push_pull_agent #(
     push_pull_device_seq#(HostDataWidth, DeviceDataWidth) m_seq =
         push_pull_device_seq#(HostDataWidth, DeviceDataWidth)::type_id::create("m_seq", this);
     super.run_phase(phase);
-    if (cfg.if_mode == dv_utils_pkg::Device && cfg.start_default_device_seq) begin
+    if (cfg.is_active && cfg.if_mode == dv_utils_pkg::Device && cfg.start_default_device_seq) begin
       uvm_config_db#(uvm_object_wrapper)::set(null, {sequencer.get_full_name(), ".run_phase"},
                                               "default_sequence", m_seq.get_type());
       sequencer.start_phase_sequence(phase);
