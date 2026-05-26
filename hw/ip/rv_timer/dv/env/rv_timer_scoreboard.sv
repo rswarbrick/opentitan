@@ -34,12 +34,55 @@ class rv_timer_scoreboard extends cip_base_scoreboard #(.CFG_T (rv_timer_env_cfg
     compute_and_check_interrupt();
   endtask
 
+  // Return true if str matches the pattern <base_name>%d and write the index to idx
+  //
+  // This uses $sscanf if str starts with base_name. Some EDA tools spit out a runtime warning
+  // message if this fails, so it's better not to do something like
+  //
+  //    is_indexed_register("foobar0", "foo", idx)
+  local function bit is_indexed_register(string str, string base_name, output int unsigned idx);
+    int unsigned base_size = base_name.len();
+    if (str.len() < base_size) return 0;
+    if (str.substr(0, base_size - 1) != base_name) return 0;
+    return $sscanf(str.substr(base_size, str.len() - 1), "%d", idx);
+  endfunction
+
+  // Return true if str matches the pattern <base_name>%d_%d and write the indices to idx0 and idx1.
+  //
+  // This uses $sscanf if str starts with base_name. Some EDA tools spit out a runtime warning
+  // message if this fails, so it's better not to do something like
+  //
+  //    is_indexed_register2("foobar0", "foo", idx0, idx1)
+  local function bit is_indexed_register2(string              str,
+                                          string              base_name,
+                                          output int unsigned idx0,
+                                          output int unsigned idx1);
+    int unsigned base_size = base_name.len();
+    string       suffix;
+
+    if (str.len() < base_size) return 0;
+    if (str.substr(0, base_size - 1) != base_name) return 0;
+
+    // Annoyingly, $sscanf(xxx, "%d_%d", idx0, idx1) doesn't work here, because "_" is a valid
+    // number separator is SystemVerilog (the 123_456 literal is the same thing as 123456).
+    // Tokenizing manually is tricky, so we cheat and make a version of str where "_" has been
+    // replaced with " ".
+    suffix = str.substr(base_size, str.len() - 1);
+    for (int unsigned pos = 0; pos < suffix.len(); pos++) begin
+      suffix[pos] = (suffix[pos] == "_") ? " " : suffix[pos];
+    end
+
+    return ($sscanf(suffix, "%d %d", idx0, idx1) == 2);
+  endfunction
+
   virtual task process_tl_access(tl_seq_item item, tl_channels_e channel, string ral_name);
-    string  csr_name;
-    bit     do_read_check   = 1'b1;
-    bit     write           = item.is_write();
+    string       csr_name;
+    int unsigned hart_idx, timer_idx;
+    bit          write = item.is_write();
+
     uvm_reg_addr_t csr_addr = cfg.ral_models[ral_name].get_word_aligned_addr(item.a_addr);
     uvm_reg csr = cfg.ral_models[ral_name].get_default_map().get_reg_by_offset(csr_addr);
+
     if (csr == null) begin
       `uvm_fatal(`gfn, $sformatf("Access unexpected addr 0x%0h", csr_addr))
     end
@@ -47,16 +90,12 @@ class rv_timer_scoreboard extends cip_base_scoreboard #(.CFG_T (rv_timer_env_cfg
     csr_name = csr.get_name();
 
     if (!write && channel == AddrChannel) begin
-      if (!uvm_re_match("intr_state*", csr_name)) begin
-        for (int i = 0; i < NUM_HARTS; i++) begin
-          if (csr_name == $sformatf("intr_state%0d", i)) begin
-            if ((intr_status_exp[i] != csr.get_mirrored_value()) & (ignore_period[i] == 'b0)) begin
-              void'(csr.predict(.value(intr_status_exp[i]), .kind(UVM_PREDICT_READ)));
-            end
-            break;
-          end
-          else if (i == (NUM_HARTS - 1)) begin
-            `uvm_fatal(`gfn, $sformatf("invalid csr: %0s", csr.get_full_name()))
+      // If this is a read of an intr_status register, update the prediction in the uvm_reg to match
+      // intr_status_exp (which has contains predictions of when interrupts will be asserted).
+      if (is_indexed_register(csr_name, "intr_state", hart_idx)) begin
+        if (!ignore_period[hart_idx]) begin
+          if (!csr.predict(.value(intr_status_exp[hart_idx]), .kind(UVM_PREDICT_READ))) begin
+            `uvm_error(get_full_name(), $sformatf("Failed to predict %0s", csr_name))
           end
         end
       end
@@ -66,127 +105,86 @@ class rv_timer_scoreboard extends cip_base_scoreboard #(.CFG_T (rv_timer_env_cfg
 
     // if incoming access is a write to a valid csr, then make updates right away
     if (write && channel == AddrChannel) begin
-      void'(csr.predict(.value(item.a_data), .kind(UVM_PREDICT_WRITE), .be(item.a_mask)));
+      if (!csr.predict(.value(item.a_data), .kind(UVM_PREDICT_WRITE), .be(item.a_mask))) begin
+        `uvm_error(get_full_name(), $sformatf("Failed to predict %0s", csr_name))
+      end
 
-      // process the csr req
-      case (1)
-        (!uvm_re_match("ctrl*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            for (int j = 0; j < NUM_TIMERS; j++) begin
-              en_timers[i][j] = get_reg_fld_mirror_value(ral, "ctrl", $sformatf("active_%0d", j));
+      if (csr_name == "ctrl") begin
+        // This is a write to the ctrl register (a packed multireg with one bit per hart). Update
+        // en_timers, our prediction of which timers are enabled. This is in the same format.
+        en_timers = cfg.ral.ctrl[0].active.get_mirrored_value();
+
+        // Sample all timers active coverage for each hart
+        if (cfg.en_cov) cov.ctrl_reg_cov_obj[hart_idx].timer_active_cg.sample(en_timers[hart_idx]);
+      end else if (is_indexed_register(csr_name, "cfg", hart_idx)) begin
+        // This is a write to the cfg register for the hart with index hart_idx
+        prescale[hart_idx] = csr.get_field_by_name("prescale").get_mirrored_value();
+        step[hart_idx]     = csr.get_field_by_name("step").get_mirrored_value();
+      end else if (is_indexed_register(csr_name, "timer_v_lower", hart_idx)) begin
+        // This is a write to the lower 32 bits of the timer for the hart with index hart_idx
+        timer_val[hart_idx][31:0] = csr.get_mirrored_value();
+        num_clk_update_due[hart_idx] = 1;
+      end else if (is_indexed_register(csr_name, "timer_v_upper", hart_idx)) begin
+        // This is a write to the upper 32 bits of the timer for the hart with index hart_idx
+        timer_val[hart_idx][63:32] = csr.get_mirrored_value();
+        num_clk_update_due[hart_idx] = 1;
+      end else if (is_indexed_register2(csr_name, "compare_lower", hart_idx, timer_idx)) begin
+        // This is a write to the lower 32 bits of the comparator with index timer_idx in the hart
+        // with index hart_idx.
+        compare_val[hart_idx][timer_idx][31:0] = csr.get_mirrored_value();
+        if (en_timers[hart_idx][timer_idx] == 0) begin
+          // Reset the interrupt when mtimecmp is updated and timer is not active
+          intr_status_exp[hart_idx][timer_idx] = 0;
+          if (cfg.en_cov) cov.sample_intr_pin(timer_idx, 0);
+        end else begin
+          // intr stays sticky if timer is active
+          ctimecmp_update_on_fly = 1;
+          if (cfg.en_cov) cov.sample_intr_pin(timer_idx, intr_status_exp[hart_idx][timer_idx]);
+        end
+      end else if (is_indexed_register2(csr_name, "compare_upper", hart_idx, timer_idx)) begin
+        // This is a write to the upper 32 bits of the comparator with index timer_idx in the hart
+        // with index hart_idx.
+        compare_val[hart_idx][timer_idx][63:32] = csr.get_mirrored_value();
+        if (en_timers[hart_idx][timer_idx] == 0) begin
+          // Reset the interrupt when mtimecmp is updated and timer is not active
+          intr_status_exp[hart_idx][timer_idx] = 0;
+          if (cfg.en_cov) cov.sample_intr_pin(timer_idx, 0);
+        end else begin
+          // intr stays sticky if timer is active
+          ctimecmp_update_on_fly = 1;
+          if (cfg.en_cov) cov.sample_intr_pin(timer_idx, intr_status_exp[hart_idx][timer_idx]);
+        end
+      end else if (is_indexed_register(csr_name, "intr_enable", hart_idx)) begin
+        // This is a write to the interrupt enable register for the hart with index hart_idx
+        en_interrupt[hart_idx] = csr.get_mirrored_value();
+      end else if (is_indexed_register(csr_name, "intr_state", hart_idx)) begin
+        // This is a write to the interrupt status register for the hart with index hart_idx.
+        //
+        // The register is W1C
+        for (int j = 0; j < NUM_TIMERS; j++) begin
+          int full_timer_idx = hart_idx * NUM_TIMERS + j;
+          if (item.a_data[j] == 1) begin
+            if (en_timers[hart_idx][j] == 0) begin
+              intr_status_exp[hart_idx][j] = 0;
             end
-            //Sample all timers active coverage for each hart
-            if (cfg.en_cov) cov.ctrl_reg_cov_obj[i].timer_active_cg.sample(en_timers[i]);
+            if (cfg.en_cov) cov.sample_intr_pin(full_timer_idx, en_timers[hart_idx][j]);
           end
         end
-        (!uvm_re_match("cfg*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            step[i]     = get_reg_fld_mirror_value(ral, $sformatf("cfg%0d", i), "step");
-            prescale[i] = get_reg_fld_mirror_value(ral, $sformatf("cfg%0d", i), "prescale");
-          end
+      end else if (is_indexed_register(csr_name, "intr_test", hart_idx)) begin
+        // This is a write to the interrupt test register for the hart with index hart_idx
+        int unsigned intr_test_val = item.a_data;
+        for (int j = 0 ; j < NUM_TIMERS; j++) begin
+          int intr_pin_idx = hart_idx * NUM_TIMERS + j;
+          if (intr_test_val[j]) intr_status_exp[hart_idx][j] = intr_test_val[j];
+          //Sample intr_test coverage for each bit of test reg
+          if (cfg.en_cov) cov.intr_test_cg.sample(intr_pin_idx,
+                                                  intr_test_val[j],
+                                                  en_interrupt[hart_idx][j],
+                                                  intr_status_exp[hart_idx][j]);
         end
-        (!uvm_re_match("timer_v_lower*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            timer_val[i][31:0] = get_reg_fld_mirror_value(
-                                     ral, $sformatf("timer_v_lower%0d", i), "v");
-            num_clk_update_due[i] = 1'b1;
-          end
-        end
-        (!uvm_re_match("timer_v_upper*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            timer_val[i][63:32] = get_reg_fld_mirror_value(
-                                      ral, $sformatf("timer_v_upper%0d", i), "v");
-            num_clk_update_due[i] = 1'b1;
-          end
-        end
-        (!uvm_re_match("compare_lower*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            for (int j = 0; j < NUM_TIMERS; j++) begin
-              int timer_idx = i * NUM_TIMERS + j;
-              string compare_lower_str = $sformatf("compare_lower%0d_%0d", i, j);
-              if (csr_name == compare_lower_str) begin
-                compare_val[i][j][31:0] = csr.get_mirrored_value();
-                if (en_timers[i][j] == 0) begin
-                  // Reset the interrupt when mtimecmp is updated and timer is not active
-                  intr_status_exp[i][j] = 0;
-                  if (cfg.en_cov) cov.sample_intr_pin(timer_idx, 0);
-                end else begin
-                  // intr stays sticky if timer is active
-                  ctimecmp_update_on_fly = 1;
-                  if (cfg.en_cov) cov.sample_intr_pin(timer_idx, intr_status_exp[i][j]);
-                end
-                break;
-              end
-            end
-          end
-        end
-        (!uvm_re_match("compare_upper*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            for (int j = 0; j < NUM_TIMERS; j++) begin
-              int timer_idx = i * NUM_TIMERS + j;
-              string compare_upper_str = $sformatf("compare_upper%0d_%0d", i, j);
-              if (csr_name == compare_upper_str) begin
-                compare_val[i][j][63:32] = csr.get_mirrored_value();
-                if (en_timers[i][j] == 0) begin
-                  // Reset the interrupt when mtimecmp is updated and timer is not active
-                  intr_status_exp[i][j] = 0;
-                  if (cfg.en_cov) cov.sample_intr_pin(timer_idx, 0);
-                end else begin
-                  // intr stays sticky if timer is active
-                  ctimecmp_update_on_fly = 1;
-                  if (cfg.en_cov) cov.sample_intr_pin(timer_idx, intr_status_exp[i][j]);
-                end
-                break;
-              end
-            end
-          end
-        end
-        (!uvm_re_match("intr_enable*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            for (int j = 0; j < NUM_TIMERS; j++) begin
-              en_interrupt[i][j] = get_reg_fld_mirror_value(
-                                       ral, $sformatf("intr_enable%0d", i), $sformatf("ie_%0d", j));
-            end
-          end
-        end
-        (!uvm_re_match("intr_state*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            string intr_state_str = $sformatf("intr_state%0d", i);
-            if (csr_name == intr_state_str) begin
-              // Intr_state reg is W1C, update expected status with RAL mirrored val
-              for (int j = 0; j < NUM_TIMERS; j++) begin
-                int timer_idx = i * NUM_TIMERS + j;
-                if (item.a_data[j] == 1) begin
-                  if (en_timers[i][j] == 0) begin
-                    intr_status_exp[i][j] = 0;
-                  end
-                  if (cfg.en_cov) cov.sample_intr_pin(timer_idx, en_timers[i][j]);
-                end
-              end
-              break;
-            end
-          end
-        end
-        (!uvm_re_match("intr_test*", csr_name)): begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            string intr_test_str = $sformatf("intr_test%0d", i);
-            if (csr_name == intr_test_str) begin
-              uint intr_test_val = item.a_data;
-              for (int j = 0 ; j < NUM_TIMERS; j++) begin
-                int intr_pin_idx = i * NUM_TIMERS + j;
-                if (intr_test_val[j]) intr_status_exp[i][j] = intr_test_val[j];
-                //Sample intr_test coverage for each bit of test reg
-                if (cfg.en_cov) cov.intr_test_cg.sample(intr_pin_idx, intr_test_val[j],
-                                                        en_interrupt[i][j], intr_status_exp[i][j]);
-              end
-              break;
-            end
-          end
-        end
-        default: begin
-          `uvm_fatal(`gfn, $sformatf("invalid csr: %0s", csr.get_full_name()))
-        end
-      endcase
+      end else begin
+        `uvm_error(get_full_name(), $sformatf("Unrecognised CSR: %0s", csr.get_full_name()))
+      end
     end
 
     if (channel == DataChannel) begin
@@ -196,38 +194,45 @@ class rv_timer_scoreboard extends cip_base_scoreboard #(.CFG_T (rv_timer_env_cfg
       if (!ctimecmp_update_on_fly) check_interrupt_pin();
       ctimecmp_update_on_fly = 0;
 
-      // On reads, if do_read_check, is set, then check mirrored_value against item.d_data
+      // On reads, check mirrored_value against item.d_data
       if (!write) begin
-        // exclude read check for timer_val* reg if read happened when timer is enabled
-        if (!uvm_re_match("timer_v_*", csr_name)) begin
-          for (int i = 0; i < NUM_HARTS; i++) begin
-            if (!uvm_re_match($sformatf("timer_v_*%0d", i), csr_name)) begin
-              if (en_timers[i] == 0) begin
-                `DV_CHECK_EQ(csr.get_mirrored_value(), item.d_data)
-              end
-              else begin
-                if (!uvm_re_match("timer_v_lower*", csr_name)) begin
-                  timer_val[i][31:0] = item.d_data;
-                  // on timer_val read update num_clks
-                  num_clk_update_due[i] = 1'b1;
-                end
-                else begin
-                  timer_val[i][63:32] = item.d_data;
-                end
-              end
-              break;
-            end
-            else if (i == (NUM_HARTS - 1)) begin
-              `uvm_fatal(`gfn, $sformatf("invalid csr: %0s", csr.get_full_name()))
-            end
-          end
-        end
-        // Read happened for other registers
-        else if (do_read_check) begin
-          `DV_CHECK_EQ(csr.get_mirrored_value(), item.d_data)
+        bit reading_timer, is_upper;
+
+        if (is_indexed_register(csr_name, "timer_v_lower", hart_idx)) begin
+          reading_timer = 1;
+        end if (is_indexed_register(csr_name, "timer_v_upper", hart_idx)) begin
+          reading_timer = 1;
+          is_upper = 1;
         end
 
-        void'(csr.predict(.value(item.d_data), .kind(UVM_PREDICT_READ)));
+        // If reading_timer is true then one of the two $sscanf calls above managed to get
+        // hart_idx. Are we reading a timer that is enabled?
+        if (reading_timer && en_timers[hart_idx]) begin
+          // Since the timer is enabled, we don't check the value we read (since it's changing!) but
+          // we do update our mirrored value.
+          if (is_upper) timer_val[hart_idx][63:32] = item.d_data;
+          else          timer_val[hart_idx][31:0]  = item.d_data;
+
+          // If this is a read of the lower bits, update num_clks.
+          if (!is_upper) num_clk_update_due[hart_idx] = 1;
+
+          // Update our prediction of the register (based on the value we just read)
+          if (!csr.predict(.value(item.d_data), .kind(UVM_PREDICT_READ))) begin
+            `uvm_error(get_full_name(),
+                       $sformatf("Failed to update prediction for %0s", csr.get_full_name()))
+          end
+        end else begin
+          // Our register read is not of an enabled timer. As such, it is of a register whose value
+          // we have predicted. Check the prediction matches.
+          if (item.d_data != csr.get_mirrored_value()) begin
+            `uvm_error(get_full_name(),
+                       $sformatf({"Mismatch when reading %0s. ",
+                                  "Register read returned 0x%0x but mirrored value was 0x%0x."},
+                                 csr.get_full_name(),
+                                 item.d_data,
+                                 csr.get_mirrored_value()))
+          end
+        end
       end
     end
   endtask
