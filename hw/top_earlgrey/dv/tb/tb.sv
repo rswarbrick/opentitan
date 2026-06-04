@@ -103,13 +103,14 @@ module tb;
   bind chip_earlgrey_asic chip_if chip_if();
 
 `ifdef DISABLE_ROM_INTEGRITY_CHECK
-  chip_earlgrey_asic #(
-    // This is to be used carefully, and should never be on for synthesis.
-    // It causes many rom features to be disabled, including the very slow
-    // integrity check, so full chip simulation runs don't do it for each
-    // reset.
-    .SecRomCtrlDisableScrambling(1'b1)
-) dut (
+  This is commented out to fix indentation in the editor...
+//  chip_earlgrey_asic #(
+//    // This is to be used carefully, and should never be on for synthesis.
+//    // It causes many rom features to be disabled, including the very slow
+//    // integrity check, so full chip simulation runs don't do it for each
+//    // reset.
+//    .SecRomCtrlDisableScrambling(1'b1)
+//) dut (
 `else
   chip_earlgrey_asic dut (
 `endif
