@@ -10,18 +10,6 @@ class rv_timer_base_vseq extends cip_base_vseq #(
     );
   `uvm_object_utils(rv_timer_base_vseq)
 
-  // random delay between consecutive transactions
-  rand uint delay;
-
-  constraint delay_c {
-    delay dist {
-      0                   :/ 1,
-      [1      :100]       :/ 1,
-      [101    :10_000]    :/ 8,
-      [10_001 :1_000_000] :/ 1
-    };
-  }
-
   // hart specific parameters
   // These need to be NUM_HARTS size arrays; but the current assumption is these values will be the
   // same for all harts.
@@ -39,6 +27,25 @@ class rv_timer_base_vseq extends cip_base_vseq #(
   task pre_start();
     super.pre_start();
   endtask
+
+  // Choose a random delay, with weighting
+  //
+  // The weighting is chosen to mostly be a few microseconds, but occasionally give a small or
+  // larger delay (below 1ms).
+  function int unsigned pick_random_delay_ns();
+    int unsigned delay;
+    if (!std::randomize(delay) with {
+          delay dist {
+            0                  :/ 1,
+            [1     :100]       :/ 1,
+            [101   :10_000]    :/ 8,
+            [10_001:1_000_000] :/ 1
+          };
+        }) begin
+      `uvm_fatal("RAND", "Failed to randomize delay.")
+    end
+    return delay;
+  endfunction
 
   // cfg rv_timer - set a particular timer active or inactive
   virtual task cfg_timer(int hart = 0, int timer = 0, bit enable = 1'b1);
@@ -235,7 +242,7 @@ class rv_timer_base_vseq extends cip_base_vseq #(
             begin : isolation_fork
               fork
                 begin
-                  delay = $urandom_range(1, 10000);
+                  int unsigned delay = $urandom_range(1, 10000);
                   #(delay * 1ns);
                 end
                 wait(cfg.under_reset);
