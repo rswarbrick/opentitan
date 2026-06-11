@@ -100,93 +100,106 @@ class rv_timer_random_vseq extends rv_timer_base_vseq;
     num_trans.rand_mode(0);
   endtask
 
-  // Repeatedly read each hart's intr_state register until its bits exactly equal the set of enabled
+  // Repeatedly read the hart's intr_state register until its bits exactly equal the set of enabled
   // timers (en_timers), meaning that the right interrupts have been asserted.
   //
-  // The spinwait calls have timeouts derived from timeout_ns. The task will exit immediately on
-  // reset.
+  // Exit if this happens or on a timeout (with the given timeout_ns) or if reset is asserted.
+  task intr_state_spinwait_hart(int unsigned hart, int unsigned timeout_ns);
+    // This flag gets set once timeout_ns nanoseconds have elapsed (which causes the repeated read
+    // thread to finish)
+    bit seen_timeout;
+
+    // Pick a random gap between each read of the intr_state register
+    int unsigned spinwait_delay_ns = pick_random_delay_ns();
+
+    string  reg_name = $sformatf("intr_state%0d", hart);
+    uvm_reg intr_state_reg = ral.get_reg_by_name(reg_name);
+
+    if (intr_state_reg == null) begin
+      `uvm_fatal(get_full_name(), $sformatf("No such register: %0s", reg_name))
+    end
+
+    fork : isolation_fork begin
+      fork
+        // The timeout thread, which will run until the timeout, then set a flag and wait forever
+        // (allowing us to use join_any to wait for the other thread).
+        begin
+          #(timeout_ns * 1ns);
+          seen_timeout = 1'b1;
+          wait(0);
+        end
+
+        // The thread that reads the interrupt register, if it sees that all the timers have
+        // generated an interrupt. It also stops early on a timeout (looking at seen_timeout) or if
+        // reset is asserted.
+        while (!seen_timeout) begin
+          uvm_status_e   status;
+          uvm_reg_data_t reg_value;
+
+          intr_state_reg.read(status, reg_value);
+          if (cfg.under_reset) break;
+
+          if (status != UVM_IS_OK) begin
+            `uvm_error(get_full_name(), $sformatf("Failed to read %0s", reg_name))
+          end
+
+          // We are done if there are no enabled timers that have not generated an interrupt.
+          if (!(en_timers & ~reg_value)) break;
+
+          // Otherwise, wait a short time before checking for timeout then reading the register
+          // again.
+          wait_ns_or_reset(spinwait_delay_ns);
+        end
+      join_any
+      disable fork;
+    end join
+  endtask
+
+  // Repeatedly read each hart's intr_state register until it shows an interrupt from each enabled
+  // timer.
+  //
+  // This exits (shortly) after timeout_ns or immediately if there is a reset.
   task intr_state_spinwait_all_harts(int unsigned timeout_ns);
     fork : isolation_fork begin
       for (int i = 0; i < NUM_HARTS; i++) begin
         automatic int a_i = i;
         if (en_harts[a_i]) begin
           fork begin
-            // Poll intr_status continuously until it reads the expected value. If the interrupt
-            // will happen in timeout_ns nanoseconds and we happen to read the state just
-            // beforehand, we'll see the high value on the next read (delay nanoseconds later). As
-            // such, we set the spinwait timeout to the sum of the two numbers plus an extra 100ns
-            // for a few extra clock ticks.
-            int unsigned actual_timeout_ns;
-
-            `DV_CHECK_MEMBER_RANDOMIZE_FATAL(delay)
-
-            actual_timeout_ns = 100 + delay + timeout_ns;
-            intr_state_spinwait(.hart(a_i), .exp_data(en_timers),
-                                .spinwait_delay_ns(delay), .timeout_ns(actual_timeout_ns));
+            intr_state_spinwait_hart(a_i, timeout_ns);
           end join_none
         end
       end
-
-      // Wait for all of the interrupt polling tasks to complete. If a reset is asserted, they will
-      // all complete immediately.
       wait fork;
     end join
   endtask
 
-  task body();
-    // This task will run timers and wait until they raise an interrupt. This timeout gives an upper
-    // bound on how long to wait.
-    int unsigned intr_timeout_ns = delay * 2 + (max_clks_until_expiry *
-                                                (cfg.clk_rst_vif.clk_period_ps / 1000.0));
-
-    for (int trans = 1; trans <= num_trans; trans++) begin
-      `uvm_info(`gfn, $sformatf("Running test iteration %0d/%0d", trans, num_trans), UVM_LOW)
-
-      if (trans > 1) `DV_CHECK_RANDOMIZE_FATAL(this)
-
-      // disable timers first
-      csr_wr(.ptr(ral.ctrl[0]), .value(ral.ctrl[0].get_reset()));
-      // configure the timers and harts based on rand fields
-      cfg_all_timers();
-      // now enable timers
-      for (int i = 0; i < NUM_HARTS; i++) begin
-        for (int j = 0; j < NUM_TIMERS; j++) begin
-          cfg_timer(.hart(i), .timer(j), .enable(en_timers[j]));
-          if (cfg.under_reset) return;
-        end
-      end
-
-      fork
-        // Wait a randomised amount of time and then assert a reset (while the timer is running)
-        if (assert_reset) begin
-          `DV_CHECK_MEMBER_RANDOMIZE_FATAL(delay)
-          cfg.clk_rst_vif.wait_clks_or_rst(delay);
-          dut_init("HARD");
-        end
-
-        intr_state_spinwait_all_harts(intr_timeout_ns);
-      join
-
-      // Disable timers.
-      csr_wr(.ptr(ral.ctrl[0]), .value(ral.ctrl[0].get_reset()));
-
-      // Write one to clear the interrupt status.
-      for (int i = 0; i < NUM_HARTS; i++) begin
-        for (int j = 0; j < NUM_TIMERS; j++) begin
-          if (en_harts[i] && en_timers[j]) begin
-            clear_intr_state(.hart(i), .timer(j));
-          end
-        end
+  // Disable every timer on every hart
+  //
+  // Exits early if reset is asserted.
+  task disable_timers();
+    // The CTRL multireg has a register per hart and the bits of the register are the enable pins
+    // for the timers in the hart. Write zero to disable all of them.
+    foreach (ral.ctrl[i]) begin
+      uvm_status_e status;
+      ral.ctrl[i].write(status, 0);
+      if (cfg.under_reset) return;
+      if (status != UVM_IS_OK) begin
+        `uvm_error(get_full_name(), $sformatf("Failed to write %0s", ral.ctrl[i].get_name()))
       end
     end
-  endtask : body
+  endtask
 
-  // Function to calculate number of clks to interrupt for given hart and timer
-  function automatic uint calculate_num_clks(int hart = 0, int timer = 0);
-    uint64 mtime_dif = compare_val[hart][timer] - timer_val[hart];
-    calculate_num_clks = ((mtime_dif / step[hart]) +
-                          ((mtime_dif % step[hart]) != 0)) * (prescale[hart] +1) + 1;
-  endfunction : calculate_num_clks
+  // For every hart, enable the timers whose corresponding bit in en_timers is set
+  //
+  // Exits early if reset is asserted.
+  task enable_timers();
+    for (int i = 0; i < NUM_HARTS; i++) begin
+      for (int j = 0; j < NUM_TIMERS; j++) begin
+        cfg_timer(.hart(i), .timer(j), .enable(en_timers[j]));
+        if (cfg.under_reset) return;
+      end
+    end
+  endtask
 
   // Configure the timers of the given hart based on fields in the class
   //
@@ -231,5 +244,82 @@ class rv_timer_random_vseq extends rv_timer_base_vseq;
       wait fork;
     end join
   endtask : cfg_all_timers
+
+  // Clear the interrupt status for each timer that was enabled (and so might have generated an
+  // interrupt)
+  //
+  // Exits early if a reset is asserted.
+  task clear_all_interrupts();
+    for (int i = 0; i < NUM_HARTS; i++) begin
+      for (int j = 0; j < NUM_TIMERS; j++) begin
+        if (en_harts[i] && en_timers[j]) begin
+          clear_intr_state(.hart(i), .timer(j));
+          if (cfg.under_reset) return;
+        end
+      end
+    end
+  endtask
+
+  // Run a single iteration of the test.
+  //
+  // This configures the timers, enables them and then waits for all to generate interrupts before
+  // disabling the timers and clearing everything again.
+  task run_one_trans();
+    // This task will run timers and wait until they raise an interrupt. They should have been
+    // configured to do this in at most max_clks_until_expiry cycles, from which we derive a timeout
+    // here.
+    //
+    // After the timeout has elapsed, intr_state_spinwait_hart will exit.
+    int unsigned intr_timeout_ns = max_clks_until_expiry * (cfg.clk_rst_vif.clk_period_ps / 1000.0);
+
+    // Disable timers before configuring them.
+    disable_timers();
+    if (cfg.under_reset) return;
+
+    // Configure the timers in each hart
+    cfg_all_timers();
+    if (cfg.under_reset) return;
+
+    // Enable the timers (based on the flags in en_timers) for each hart
+    enable_timers();
+    if (cfg.under_reset) return;
+
+    // Wait until all the enabled timers have generated an interrupt, stopping after
+    // intr_timeout_ns.
+    //
+    // If assert_reset is true, run this in parallel with a randomly delayed reset. If that reset
+    // arrives before intr_state_spinwait_all_harts completes (likely) then it will cause that task
+    // to exit early.
+    fork
+      intr_state_spinwait_all_harts(intr_timeout_ns);
+      if (assert_reset) begin
+        // Assert the reset at an arbitrary time in the range 100-200ns (long enough that a timer
+        // might have expired, but it's possible that none have.
+        #($urandom_range(100, 1000) * 1ns);
+        dut_init("HARD");
+      end
+    join
+
+    // Before we finish, we will clean up again by disabling the timers and clearing any interrupts.
+    // This isn't necessary if we just reset the block.
+    if (assert_reset) return;
+
+    // Disable the timers again
+    disable_timers();
+    if (cfg.under_reset) return;
+
+    // Clear the interrupt status for each timer
+    clear_all_interrupts();
+  endtask
+
+  task body();
+    for (int trans = 1; trans <= num_trans; trans++) begin
+      `uvm_info(`gfn, $sformatf("Running test iteration %0d/%0d", trans, num_trans), UVM_LOW)
+      if (trans > 1) begin
+        if (!randomize()) `uvm_fatal(get_full_name(), "Failed to randomize vseq.")
+      end
+      run_one_trans();
+    end
+  endtask
 
 endclass : rv_timer_random_vseq
