@@ -163,4 +163,11 @@ class rv_timer_cfg_update_on_fly_vseq extends rv_timer_random_vseq;
     end
   endtask : body
 
+  // Function to calculate number of clks to interrupt for given hart and timer
+  function automatic uint calculate_num_clks(int hart = 0, int timer = 0);
+    uint64 mtime_dif = compare_val[hart][timer] - timer_val[hart];
+    calculate_num_clks = ((mtime_dif / step[hart]) +
+                          ((mtime_dif % step[hart]) != 0)) * (prescale[hart] +1) + 1;
+  endfunction : calculate_num_clks
+
 endclass : rv_timer_cfg_update_on_fly_vseq
