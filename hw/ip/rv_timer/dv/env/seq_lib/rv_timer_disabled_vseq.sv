@@ -50,8 +50,7 @@ class rv_timer_disabled_vseq extends rv_timer_random_vseq;
           // Read intr status and timer_val reg randomly
           // Read will trigger check in scoreboard
           forever begin
-            `DV_CHECK_MEMBER_RANDOMIZE_FATAL(delay)
-            `DV_SPINWAIT_EXIT(#(delay * 1ns);, wait (cfg.under_reset);, ,)
+            `DV_SPINWAIT_EXIT(#(pick_random_delay_ns() * 1ns);, wait (cfg.under_reset);, ,)
             for (int i = 0; i < NUM_HARTS; i++) begin
               read_intr_status_reg(.hart(i), .status_val(read_data));
               read_timer_val_reg(.hart(i), .mtime_val(read_data));
