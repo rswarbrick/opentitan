@@ -43,11 +43,6 @@ proc waive_end_of_decode_fsm {instance} {
     check_cov -waiver -add -cover_item_id ${cov_id} -comment "Empty case item at end of FSM"
 }
 
-set valid_state_props [get_property_list -regexp -include {"name" "ValidState_A$"}]
-foreach prop $valid_state_props {
-    assert -set_helper $prop
-}
-
 # The property names in this list are properties that depend on some FSM state register pointing at
 # a parasitic state. Use a stopat on various state registers to make the properties say something.
 
