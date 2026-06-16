@@ -24,7 +24,9 @@ generate:
 
 targets:
   default: &default_target
-    default_tool: icarus
+    flow: sim
+    flow_options:
+      tool: icarus
     filesets:
       - files_formal
     generate:
