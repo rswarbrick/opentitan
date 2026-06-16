@@ -15,7 +15,9 @@ filesets:
 
 targets:
   default: &default_target
-    default_tool: icarus
+    flow: sim
+    flow_options:
+      tool: icarus
     filesets:
       - files_formal
     toplevel: prim_fifo_async_sram_adapter_tb
