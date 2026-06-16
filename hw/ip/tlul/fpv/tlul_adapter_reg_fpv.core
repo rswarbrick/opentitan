@@ -15,7 +15,9 @@ filesets:
 
 targets:
   formal:
-    default_tool: icarus
+    flow: sim
+    flow_options:
+      tool: icarus
     filesets:
       - files_formal
     toplevel: tlul_adapter_reg_tb
