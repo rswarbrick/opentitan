@@ -19,7 +19,9 @@ targets:
   default: &default_target
     # note, this setting is just used
     # to generate a file list for jg
-    default_tool: icarus
+    flow: sim
+    flow_options:
+      tool: icarus
     filesets:
       - files_formal
     toplevel: ${module_instance_name}_esc_timer_tb
