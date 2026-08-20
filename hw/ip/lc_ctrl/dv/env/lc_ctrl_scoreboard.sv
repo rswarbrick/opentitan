@@ -32,8 +32,8 @@ class lc_ctrl_scoreboard extends cip_base_scoreboard #(
     .HostDataWidth  (OTP_PROG_HDATA_WIDTH),
     .DeviceDataWidth(OTP_PROG_DDATA_WIDTH)
   )) otp_prog_fifo;
-  uvm_tlm_analysis_fifo #(alert_esc_seq_item) esc_wipe_secrets_fifo;
-  uvm_tlm_analysis_fifo #(alert_esc_seq_item) esc_scrap_state_fifo;
+  uvm_tlm_analysis_fifo #(esc_seq_item) esc_wipe_secrets_fifo;
+  uvm_tlm_analysis_fifo #(esc_seq_item) esc_scrap_state_fifo;
   uvm_tlm_analysis_fifo #(jtag_riscv_item) jtag_riscv_fifo;
 
   `uvm_component_new
