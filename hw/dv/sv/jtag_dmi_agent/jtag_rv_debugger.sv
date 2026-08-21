@@ -1103,28 +1103,52 @@ class jtag_rv_debugger extends uvm_object;
   endtask
 
   // Reads sbcs register to poll and wait for access to complete.
-  virtual task sba_access_busy_wait(input sba_access_item req);
-    logic is_busy;
-    `DV_SPINWAIT_EXIT(
-      do begin
-        sba_access_status(req, is_busy);
-        if (req.is_err != SbaErrNone) `DV_CHECK_EQ(is_busy, 0)
-      end while (is_busy && !req.is_busy_err);,
-      begin
-        fork
-          // TODO: Provide callbacks to support waiting for custom exit events.
-          wait(cfg.in_reset);
-          begin
-            // TODO: Make this timeout controllable.
-            cfg.vif.wait_tck(100000);
+  task sba_access_busy_wait(input sba_access_item req);
+    bit   timed_out;
 
-            req.timed_out = 1'b1;
-            `uvm_info(`gfn, $sformatf("SBA req timed out: %0s",
-                                      req.sprint(uvm_default_line_printer)), UVM_LOW)
+    fork : isolation_fork begin
+      fork
+        // Repeatedly read the sbcs register, either is_busy is false (meaning that sbcs.sbbusy
+        // field is false) or until req.is_busy_err is set (meaning that sbcs.sbbusyerror is true).
+        //
+        // Leave early is the agent configuration shows a reset (cfg.in_reset) or on timeout.
+        forever begin
+          logic is_busy;
+
+          if (cfg.in_reset) break;
+
+          if (timed_out) begin
+            req.timed_out = 1;
+            break;
           end
-        join_any
-      end
-    )
+
+          sba_access_status(req, is_busy);
+
+          // The sba_access_status task wrote sberror to req_is_err. That should only report an
+          // error (not SbaErrNone) after an operation is finished.
+          if ((req.is_err != SbaErrNone) && is_busy) begin
+            `uvm_error(get_full_name(),
+                       $sformatf("SBA transaction reported an error (%0s), but is still busy.",
+                                 req.is_err.name()))
+          end
+
+          // If sbbusy is false (so is_busy=0) or sbbusyerror is true (so req.is_busy_err=1), the
+          // transaction is finished.
+          if (req.is_busy_err || !is_busy) break;
+        end
+
+        // A timeout process. This sets timed_out (causing the other process to finish), but doesn't
+        // itself complete, to avoid disabling the other one at an inopportune time.
+        begin
+          cfg.vif.wait_tck(100000);
+          timed_out = 1;
+          wait(0);
+        end
+      join_any
+
+      // The first process is the only one that can complete. Disable the timeout process.
+      disable fork;
+    end join
   endtask
 
   // Clear SBA access busy error and access error sticky bits if they are set.
