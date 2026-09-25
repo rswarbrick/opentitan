@@ -7,6 +7,8 @@
       {ral.class``i``_phase0_cyc_shadowed, ral.class``i``_phase1_cyc_shadowed, \
        ral.class``i``_phase2_cyc_shadowed, ral.class``i``_phase3_cyc_shadowed};
 
+`uvm_analysis_imp_decl(_lpg)
+
 class alert_handler_scoreboard extends cip_base_scoreboard #(
     .CFG_T(alert_handler_env_cfg),
     .RAL_T(alert_handler_reg_block),
@@ -49,6 +51,9 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
   uvm_tlm_analysis_fifo #(alert_seq_item) alert_fifo[NUM_ALERTS];
   uvm_tlm_analysis_fifo #(esc_seq_item)   esc_fifo[NUM_ESCS];
 
+  // An import for LPG changes seen by the lpg_monitor
+  uvm_analysis_imp_lpg #(lpg_seq_item, alert_handler_scoreboard) m_lpg_imp;
+
   `uvm_component_new
 
   function void build_phase(uvm_phase phase);
@@ -61,6 +66,8 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
 
     foreach (alert_fifo[i]) alert_fifo[i] = new($sformatf("alert_fifo[%0d]", i), this);
     foreach (esc_fifo[i])   esc_fifo[i]   = new($sformatf("esc_fifo[%0d]"  , i), this);
+
+    m_lpg_imp = new("m_lpg_imp", this);
   endfunction
 
   function void connect_phase(uvm_phase phase);
@@ -90,9 +97,8 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
           bit alert_en, loc_alert_en;
           alert_seq_item act_item;
           alert_fifo[index].get(act_item);
-          alert_en = ral.alert_en_shadowed[index].get_mirrored_value() &&
-              prim_mubi_pkg::mubi4_test_false_loose(cfg.alert_handler_vif.lpg_cg_en[lpg_index]) &&
-              prim_mubi_pkg::mubi4_test_false_loose(cfg.alert_handler_vif.lpg_rst_en[lpg_index]);
+          alert_en = (ral.alert_en_shadowed[index].get_mirrored_value() &&
+                      !cfg.is_lpg_low_power(lpg_index));
 
           // Check that ping mechanism will only ping alerts that have been enabled and locked.
           if (act_item.m_trans_type == AlertPingTrans) begin
@@ -178,6 +184,15 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
       end
     end join
   endtask
+
+  function void write_lpg(lpg_seq_item item);
+    import prim_mubi_pkg::mubi4_t;
+    import prim_mubi_pkg::mubi4_test_true_strict;
+
+    cfg.set_lpg_state(item.m_lpg_idx,
+                      mubi4_test_true_strict(mubi4_t'(item.m_cg_en)),
+                      mubi4_test_true_strict(mubi4_t'(item.m_rst_en)));
+  endfunction
 
   virtual task check_edn_request_cycles();
     int edn_wait_cycles;
@@ -744,6 +759,12 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
     crashdump_triggered   = 0;
     ping_timer_en         = 0;
     last_triggered_alert_per_class = '{default:$realtime};
+
+    // Update our tracked lpg states so that they are all disabled again (no longer in a low power
+    // mode).
+    for (int unsigned i = 0; i < cfg.m_lpg_agent_cfg.vif.num_lpgs; i++) begin
+      cfg.set_lpg_state(i, 0, 0);
+    end
   endfunction
 
   // clear accumulative counters, and escalation counters if they are under escalation
