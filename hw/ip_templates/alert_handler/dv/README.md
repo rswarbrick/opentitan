@@ -75,9 +75,10 @@ Some of the most commonly used tasks / functions are as follows:
 * drive_alert: Drive alert_tx signal pairs through `alert_sender_driver`.
 * drive_esc_rsp: Drive esc_rx signal pairs through `esc_receiver_driver`.
 * read_ecs_status: Readout registers that reflect escalation status, including `classa/b/c/d_accum_cnt`, `classa/b/c/d_esc_cnt`, and `classa/b/c/d_state`.
-* wait_alert_handshake_done: Wait for alert_rx/tx handshake to finish. If the alert's low-power-group(LPG) is enabled, immediately return.
+* wait_alert_handshake_done: Wait for alert_rx/tx handshake to finish. If the alert's low-power-group(LPG) is enabled, return immediately.
 * wait_esc_handshake_done: Wait for esc_rx/tx handshake to finish by reading `class*_state` registers and check esc_rx/tx signals.
-* set_alert_lpg: Given alert index, find the linked LPG group and enabled the LPG group by driving `lpg_cg_en` or `lpg_rst_en` to Mubi4True.
+* enable_lpg_group: Enable / disable LPGs so that a set of alerts can be received.
+  This works by running an `lpg_seq` on the `lpg_agent` for each LPG.
 * run_esc_rsp_seq_nonblocking: A non-blocking sequence to drive `esc_tx` when received escalation or escalation-ping requests.
 * run_alert_ping_rsp_seq_nonblocking: A non-blocking sequence to drive `alert_rx` when received alert-ping requests.
 
