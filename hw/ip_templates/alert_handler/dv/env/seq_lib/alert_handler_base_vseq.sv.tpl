@@ -29,16 +29,41 @@ class ${module_instance_name}_base_vseq extends cip_base_vseq #(
   );
   `uvm_object_utils(${module_instance_name}_base_vseq)
 
+  // A sequencer to use to send LPG updates. Set this with set_sequencer() before calling start().
+  protected lpg_sequencer m_lpg_sequencer;
+
   // various knobs to enable certain routines
   bit do_alert_handler_init = 1'b0;
   bit config_locked         = 1'b0;
 
-  `uvm_object_new
+  function new(string name="");
+    super.new(name);
+  endfunction
+
+  // Set the LPG sequencer
+  function void set_lpg_sequencer(lpg_sequencer sequencer);
+    m_lpg_sequencer = sequencer;
+  endfunction
+
+  virtual task pre_start();
+    if (m_lpg_sequencer == null) begin
+      `uvm_fatal(get_full_name(), "m_lpg_sequencer has not been supplied")
+    end
+    super.pre_start();
+  endtask
 
   virtual task dut_init(string reset_kind = "HARD");
-    cfg.alert_handler_vif.init();
-    super.dut_init();
+    bit saw_reset;
+    fork
+      super.dut_init();
+      clear_all_lpgs(saw_reset);
+    join
+
+    // If we have seen a reset when clearing LPGs, there's nothing more to do. Drop out immediately.
+    if (saw_reset) return;
+
     if (do_alert_handler_init) alert_handler_init();
+
     config_locked = 0;
   endtask
 
@@ -265,30 +290,117 @@ class ${module_instance_name}_base_vseq extends cip_base_vseq #(
     join
   endtask
 
-  function void enable_lpg_group(bit [NUM_ALERTS-1:0] alert_en_i);
-    foreach (alert_en_i[i]) begin
-      if (alert_en_i[i]) set_alert_lpg(i);
-    end
-  endfunction
+  // Configure the LPGs so that every group that is used by an alert whose bit is set in alerts is
+  // put into low power mode.
+  protected task enable_lpg_group(bit [NUM_ALERTS-1:0] alerts);
+    bit [lpg_agent_pkg::MaxNumLpgs-1:0] lpgs_for_low_power;
 
-  // Enable alert's LPG based on alert_i input.
-  //
-  // Only enable this alert's LPG if the lgp input `lpg_cg_en` or `lpg_rst_en` if not Mubi4True.
-  // Because one LPG will turn off a set of alert sensors. So this task will also set all LPG's
-  // alert_host_cfgs' `en_alert_lpg` to 1.
-  virtual function void set_alert_lpg(int alert_i);
-    int       lpg_i = ${module_instance_name}_reg_pkg::LpgMap[alert_i];
-    bit [1:0] set_lpg;
+    // This bit is set if any of the LPG sequences sees a reset. The task doesn't report resets at
+    // the moment (because the task's only call site doesn't need it), but this bit could be wired
+    // out if we need that in future.
+    bit saw_reset;
 
-    if (cfg.${module_instance_name}_vif.get_lpg_status(lpg_i) == 0) begin
-      `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(set_lpg, set_lpg > 0;);
-      if (set_lpg[0]) cfg.${module_instance_name}_vif.set_lpg_cg_en(lpg_i);
-      if (set_lpg[1]) cfg.${module_instance_name}_vif.set_lpg_rst_en(lpg_i);
-      foreach (${module_instance_name}_reg_pkg::LpgMap[i]) begin
-        if (${module_instance_name}_reg_pkg::LpgMap[i] == lpg_i) cfg.alert_host_cfg[i].en_alert_lpg = 1;
+    // Work through the alerts in alerts and set the corresponding bit in lpgs_for_low_power for any
+    // alert whose bit is set.
+    foreach (alerts[i]) begin
+      if (alerts[i]) begin
+        int unsigned lpg_idx = ${module_instance_name}_reg_pkg::LpgMap[i];
+        lpgs_for_low_power[lpg_idx] = 1'b1;
       end
     end
-  endfunction
+
+    // Finally, drive sequences that put the appropriate LPGs into low power mode, (skipping LPGs
+    // that cfg thinks are already in low power mode).
+    fork : isolation_fork begin
+      for (int unsigned lpg_idx = 0; lpg_idx < cfg.m_lpg_agent_cfg.vif.num_lpgs; lpg_idx++) begin
+        if (lpgs_for_low_power[lpg_idx] && !cfg.is_lpg_low_power(lpg_idx)) begin
+          automatic int unsigned lpg_idx_ = lpg_idx;
+          fork begin
+            bit saw_reset_;
+            set_lpg(lpg_idx_, saw_reset_);
+            if (saw_reset_) saw_reset = 1;
+          end join_none
+        end
+      end
+
+      // One or more of those sequences might now be running in parallel. Wait for them to finish.
+      wait fork;
+    end join
+
+    // If we have seen a reset, the saw_reset output has already been set and we have nothing more
+    // to do.
+    if (saw_reset) return;
+
+    // Inform all alert agents whose alerts are in a low-power LPG. This has to be performed by the
+    // sequence because we don't yet track this in the environment.
+    for (int unsigned alert_idx = 0; alert_idx < NUM_ALERTS; alert_idx++) begin
+      int unsigned lpg_idx = ${module_instance_name}_reg_pkg::LpgMap[alert_idx];
+      if (lpgs_for_low_power[lpg_idx]) begin
+        cfg.alert_host_cfg[alert_idx].en_alert_lpg = 1;
+      end
+    end
+  endtask
+
+  // Put the given LPG into low power mode
+  //
+  // Set saw_reset if a reset was applied when the LPG sequence was running.
+  local task set_lpg(int unsigned lpg_idx, output bit saw_reset);
+    import lpg_agent_pkg::lpg_bool_seq;
+    lpg_bool_seq lpg_seq = lpg_bool_seq::type_id::create("lpg_seq");
+
+    // Randomise the LPG sequence so that it either asserts clock gating enable or reset enable (or
+    // possibly both) for lpg_idx.
+    if (!lpg_seq.randomize() with {
+           m_lpg_idx == local::lpg_idx;
+           m_cg_en || m_rst_en;
+         }) begin
+      `uvm_fatal(get_full_name(), "Failed to randomize lpg_seq")
+    end
+
+    lpg_seq.start(m_lpg_sequencer);
+
+    saw_reset = !lpg_seq.m_rsp.m_sending_complete;
+  endtask
+
+  // Make sure the given LPG is not in low power mode
+  //
+  // Set saw_reset if a reset was applied when the LPG sequence was running.
+  local task clear_lpg(int unsigned lpg_idx, output bit saw_reset);
+    import lpg_agent_pkg::lpg_bool_seq;
+    lpg_bool_seq lpg_seq = lpg_bool_seq::type_id::create("lpg_seq");
+
+    // Randomise the LPG sequence so that it sets both assert clock gating enable and reset enable
+    // for lpg_idx to a value other than MuBi4True.
+    if (!lpg_seq.randomize() with {
+           m_lpg_idx == local::lpg_idx;
+           !m_cg_en;
+           !m_rst_en;
+         }) begin
+      `uvm_fatal(get_full_name(), "Failed to randomize lpg_seq")
+    end
+
+    lpg_seq.start(m_lpg_sequencer);
+
+    saw_reset = !lpg_seq.m_rsp.m_sending_complete;
+  endtask
+
+  // Write values to the lpg_if to make sure that none of the LPGs is in low power mode
+  //
+  // Set saw_reset if a reset is seen when running
+  local task clear_all_lpgs(output bit saw_reset);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < cfg.m_lpg_agent_cfg.vif.num_lpgs; i++) begin
+        automatic int i_ = i;
+        fork begin
+          bit saw_reset_;
+          clear_lpg(i_, saw_reset_);
+          if (saw_reset_) saw_reset = 1;
+        end join_none
+      end
+
+      wait fork;
+    end join
+  endtask
 
   virtual task alert_handler_crashdump_phases(bit [1:0] classa_phase = $urandom(),
                                               bit [1:0] classb_phase = $urandom(),

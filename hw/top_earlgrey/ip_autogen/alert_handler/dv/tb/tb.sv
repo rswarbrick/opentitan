@@ -29,6 +29,7 @@ module tb;
   esc_if       esc_device_if [NUM_ESCS](.clk(clk), .rst_n(rst_n));
   alert_if     alert_host_if [NUM_ALERTS](.clk(clk), .rst_n(rst_n));
   esc_probe_if probe_if[NUM_ESCS](.clk(clk), .rst_n(rst_n));
+  lpg_if       lpg_if(.clk(clk), .rst_n(rst_n));
 
   // dut signals
   prim_alert_pkg::alert_rx_t [NUM_ALERTS-1:0] alert_rx;
@@ -83,10 +84,10 @@ module tb;
     .intr_classb_o        ( interrupts[1] ),
     .intr_classc_o        ( interrupts[2] ),
     .intr_classd_o        ( interrupts[3] ),
-    .lpg_cg_en_i          ( alert_handler_if.lpg_cg_en  ),
-    .lpg_rst_en_i         ( alert_handler_if.lpg_rst_en ),
+    .lpg_cg_en_i          ( lpg_if.lpg_cg_en[NLpg-1:0]  ),
+    .lpg_rst_en_i         ( lpg_if.lpg_rst_en[NLpg-1:0] ),
     .crashdump_o          ( crashdump     ),
-    .edn_o                ( edn_if[0].req    ),
+    .edn_o                ( edn_if[0].req ),
     .edn_i                ( {edn_if[0].ack, edn_if[0].d_data} ),
     .alert_rx_o           ( alert_rx      ),
     .alert_tx_i           ( alert_tx      ),
@@ -95,8 +96,9 @@ module tb;
   );
 
   initial begin
-    // drive clk and rst_n from clk_if
     clk_rst_if.set_active();
+    lpg_if.set_num_lpgs(NLpg);
+
     uvm_config_db#(virtual clk_rst_if)::set(null, "*.env", "clk_rst_vif", clk_rst_if);
     uvm_config_db#(virtual rst_shadowed_if)::set(null, "*.env", "rst_shadowed_vif",
                                                  rst_shadowed_if);
@@ -105,6 +107,8 @@ module tb;
     uvm_config_db#(virtual tl_if)::set(null, "*.env.m_tl_agent*", "vif", tl_if);
     uvm_config_db#(virtual alert_handler_if)::set(null, "*.env", "alert_handler_vif",
                    alert_handler_if);
+    uvm_config_db#(virtual lpg_if)::set(null, "*.env", "lpg_vif", lpg_if);
+
     $timeformat(-12, 0, " ps", 12);
     run_test();
   end
