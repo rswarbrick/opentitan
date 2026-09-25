@@ -8,13 +8,21 @@ class alert_handler_base_test extends cip_base_test #(
   );
 
   `uvm_component_utils(alert_handler_base_test)
-  `uvm_component_new
 
-  // the base class dv_base_test creates the following instances:
-  // alert_handler_env_cfg: cfg
-  // alert_handler_env:     env
+  function new (string name, uvm_component parent);
+    super.new(name, parent);
+  endfunction
 
-  // the base class also looks up UVM_TEST_SEQ plusarg to create and run that seq in
-  // the run_phase; as such, nothing more needs to be done
+  virtual function void configure_sequence(uvm_sequence seq);
+    alert_handler_base_vseq vseq;
 
+    super.configure_sequence(seq);
+
+    if (!$cast(vseq, seq)) begin
+      `uvm_fatal(get_full_name(),
+                 "Cannot configure sequence: it is not a alert_handler_base_vseq.")
+    end
+
+    vseq.set_lpg_sequencer(env.m_lpg_agent.sequencer);
+  endfunction
 endclass : alert_handler_base_test

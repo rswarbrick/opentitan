@@ -10,6 +10,7 @@ filesets:
       - lowrisc:dv:ralgen
       - lowrisc:dv:cip_lib
       - lowrisc:dv:esc_agent
+      - lowrisc:dv:lpg_agent
       - ${instance_vlnv(f"lowrisc:ip:{module_instance_name}_pkg:0.1")}
       - lowrisc:prim:mubi_pkg
       - ${instance_vlnv("lowrisc:constants:top_pkg")}
