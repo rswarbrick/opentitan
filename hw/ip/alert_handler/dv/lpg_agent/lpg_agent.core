@@ -1,0 +1,28 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:dv:lpg_agent:0.1"
+description: "An agent for LPG signals to the alert_handler"
+filesets:
+  files_dv:
+    depend:
+      - lowrisc:dv:dv_base_agent
+      - lowrisc:dv:status_item
+      - lowrisc:prim:mubi_pkg
+    files:
+      - lpg_agent_pkg.sv
+      - lpg_seq_item.svh: {is_include_file: true}
+      - lpg_driver.svh: {is_include_file: true}
+      - lpg_monitor.svh: {is_include_file: true}
+      - lpg_agent_cfg.svh: {is_include_file: true}
+      - lpg_agent.svh: {is_include_file: true}
+      - lpg_seq.svh: {is_include_file: true}
+      - lpg_bool_seq.svh: {is_include_file: true}
+      - lpg_if.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+      - files_dv
