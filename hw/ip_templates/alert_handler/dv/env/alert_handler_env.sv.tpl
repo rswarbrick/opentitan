@@ -15,10 +15,13 @@ class ${module_instance_name}_env extends cip_base_env #(
   alert_agent alert_host_agent[];
   esc_agent   esc_device_agent[];
 
+  // An agent for the interface that configures LPGs for alert_handler
+  lpg_agent m_lpg_agent;
+
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
 
-    // build alert agents
+    // Build alert agents
     alert_host_agent                    = new[NUM_ALERTS];
     virtual_sequencer.alert_host_seqr_h = new[NUM_ALERTS];
     foreach (alert_host_agent[i]) begin
@@ -29,7 +32,7 @@ class ${module_instance_name}_env extends cip_base_env #(
       cfg.alert_host_cfg[i].clk_freq_mhz = int'(cfg.clk_freq_mhz);
     end
 
-    // build escalator agents
+    // Build escalator agents
     esc_device_agent                    = new[NUM_ESCS];
     virtual_sequencer.esc_device_seqr_h = new[NUM_ESCS];
     foreach (esc_device_agent[i]) begin
@@ -39,13 +42,20 @@ class ${module_instance_name}_env extends cip_base_env #(
       cfg.esc_device_cfg[i].en_cov = cfg.en_cov;
     end
 
-    // get vifs
+    // Build LPG agent
+    m_lpg_agent = lpg_agent::type_id::create("m_lpg_agent", this);
+    m_lpg_agent.cfg = cfg.m_lpg_agent_cfg;
+
+    // Get vifs
     if (!uvm_config_db#(crashdump_vif)::get(this, "", "crashdump_vif", cfg.crashdump_vif)) begin
-      `uvm_fatal(get_full_name(), "failed to get crashdump_vif from uvm_config_db")
+      `uvm_fatal("no_vif", "Failed to get crashdump_vif from uvm_config_db")
     end
     if (!uvm_config_db#(${module_instance_name}_vif)::get(this, "", "${module_instance_name}_vif",
                                                 cfg.${module_instance_name}_vif)) begin
-      `uvm_fatal(`gfn, "failed to get ${module_instance_name}_vif from uvm_config_db")
+      `uvm_fatal("no_vif", "Failed to get ${module_instance_name}_vif from uvm_config_db")
+    end
+    if (!uvm_config_db#(virtual lpg_if)::get(this, "", "lpg_vif", cfg.m_lpg_agent_cfg.vif)) begin
+      `uvm_fatal("no_vif", "Failed to get lpg_vif from uvm_config_db.")
     end
   endfunction
 
@@ -71,6 +81,8 @@ class ${module_instance_name}_env extends cip_base_env #(
         virtual_sequencer.esc_device_seqr_h[i] = esc_device_agent[i].sequencer;
       end
     end
+
+    m_lpg_agent.m_analysis_port.connect(scoreboard.m_lpg_imp);
   endfunction
 
 endclass

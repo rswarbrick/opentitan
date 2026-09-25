@@ -17,6 +17,13 @@ package alert_handler_env_pkg;
   import push_pull_agent_pkg::*;
   import sec_cm_pkg::*;
 
+  import lpg_agent_pkg::lpg_driver;
+  import lpg_agent_pkg::lpg_sequencer;
+  import lpg_agent_pkg::lpg_monitor;
+  import lpg_agent_pkg::lpg_seq_item;
+  import lpg_agent_pkg::lpg_agent_cfg;
+  import lpg_agent_pkg::lpg_agent;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
