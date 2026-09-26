@@ -4,14 +4,15 @@
 
 class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_block));
 
-  esc_en_vif               esc_en_vif;
-  crashdump_vif            crashdump_vif;
+  esc_en_vif    esc_en_vif;
+  crashdump_vif crashdump_vif;
 
   // ext component cfgs
-  rand alert_agent_cfg     alert_host_cfg[];
-  rand esc_agent_cfg       esc_device_cfg[];
-  lpg_agent_cfg            m_lpg_agent_cfg;
-  ping_req_agent_cfg       m_ping_req_agent_cfg;
+  rand alert_agent_cfg       alert_host_cfg[];
+  rand esc_agent_cfg         esc_device_cfg[];
+  lpg_agent_cfg              m_lpg_agent_cfg;
+  ping_req_agent_cfg         m_ping_req_agent_cfg;
+  ping_timer_force_agent_cfg m_ping_timer_force_agent_cfg;
 
   // The tracked state of an LPG (with mubi4_t booleans resolved as bits)
   typedef struct {
@@ -36,8 +37,6 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
   // get_esc_ping_req().
   local bit [NUM_ESCS-1:0] m_esc_ping_reqs;
 
-  alert_handler_vif alert_handler_vif;
-
   `uvm_object_utils_begin(alert_handler_env_cfg)
     `uvm_field_array_object(alert_host_cfg, UVM_DEFAULT)
     `uvm_field_array_object(esc_device_cfg, UVM_DEFAULT)
@@ -50,6 +49,9 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
 
     m_ping_req_agent_cfg = ping_req_agent_cfg::type_id::create("m_ping_req_agent_cfg");
     m_ping_req_agent_cfg.is_active = 1'b0;
+
+    m_ping_timer_force_agent_cfg =
+      ping_timer_force_agent_cfg::type_id::create("m_ping_timer_force_agent_cfg");
   endfunction
 
   virtual function void initialize(bit inherit_ral_models = 1'b0);
