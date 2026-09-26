@@ -10,9 +10,6 @@ interface ${module_instance_name}_if(input clk, input rst_n);
   import cip_base_pkg::*;
   import ${module_instance_name}_env_pkg::*;
 
-  logic [NUM_ALERTS-1:0] alert_ping_reqs;
-  logic [NUM_ESCS-1:0]   esc_ping_reqs;
-
   string msg_id = "${module_instance_name}_if";
 
   task automatic set_wait_cyc_mask(logic [PING_CNT_DW-1:0] val);
