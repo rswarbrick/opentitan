@@ -12,12 +12,12 @@ filesets:
       - lowrisc:dv:esc_agent
       - lowrisc:dv:lpg_agent
       - lowrisc:dv:ping_req_agent
+      - lowrisc:dv:ping_timer_force_agent
       - ${instance_vlnv(f"lowrisc:ip:{module_instance_name}_pkg:0.1")}
       - lowrisc:prim:mubi_pkg
       - ${instance_vlnv("lowrisc:constants:top_pkg")}
     files:
       - ${module_instance_name}_env_pkg.sv
-      - ${module_instance_name}_if.sv
       - ${module_instance_name}_env_cfg.sv: {is_include_file: true}
       - ${module_instance_name}_env_cov.sv: {is_include_file: true}
       - ${module_instance_name}_virtual_sequencer.sv: {is_include_file: true}

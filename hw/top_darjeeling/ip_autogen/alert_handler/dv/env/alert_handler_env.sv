@@ -21,6 +21,9 @@ class alert_handler_env extends cip_base_env #(
   // A passive agent for the interface that reports ping requests inside alert_handler
   ping_req_agent m_ping_req_agent;
 
+  // An agent that can be used to force signals in an alert_handler_ping_timer inside the device
+  ping_timer_force_agent m_ping_timer_force_agent;
+
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
 
@@ -53,13 +56,14 @@ class alert_handler_env extends cip_base_env #(
     m_ping_req_agent = ping_req_agent::type_id::create("m_ping_req_agent", this);
     m_ping_req_agent.cfg = cfg.m_ping_req_agent_cfg;
 
+    // Build ping timer forcing agent
+    m_ping_timer_force_agent = ping_timer_force_agent::type_id::create("m_ping_timer_force_agent",
+                                                                       this);
+    m_ping_timer_force_agent.cfg = cfg.m_ping_timer_force_agent_cfg;
+
     // Get vifs
     if (!uvm_config_db#(crashdump_vif)::get(this, "", "crashdump_vif", cfg.crashdump_vif)) begin
       `uvm_fatal("no_vif", "Failed to get crashdump_vif from uvm_config_db")
-    end
-    if (!uvm_config_db#(alert_handler_vif)::get(this, "", "alert_handler_vif",
-                                                cfg.alert_handler_vif)) begin
-      `uvm_fatal("no_vif", "Failed to get alert_handler_vif from uvm_config_db")
     end
     if (!uvm_config_db#(virtual lpg_if)::get(this, "", "lpg_vif", cfg.m_lpg_agent_cfg.vif)) begin
       `uvm_fatal("no_vif", "Failed to get lpg_vif from uvm_config_db.")
@@ -67,6 +71,11 @@ class alert_handler_env extends cip_base_env #(
     if (!uvm_config_db#(virtual ping_req_if)::get(this, "", "ping_req_vif",
                                                   cfg.m_ping_req_agent_cfg.vif)) begin
       `uvm_fatal("no_vif", "Failed to get ping_req_vif from uvm_config_db.")
+    end
+    if (!uvm_config_db#(virtual ping_timer_force_if)::get(
+           this, "", "ping_timer_force_vif", cfg.m_ping_timer_force_agent_cfg.vif)
+        ) begin
+      `uvm_fatal("no_vif", "Failed to get ping_timer_force_vif from uvm_config_db.")
     end
   endfunction
 

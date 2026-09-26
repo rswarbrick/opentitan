@@ -1,0 +1,25 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:dv:ping_timer_force_agent:0.1"
+description: "An agent to drive an interface that can be bound into an alert_handler_ping_timer"
+filesets:
+  files_dv:
+    depend:
+      - lowrisc:dv:dv_base_agent
+    files:
+      - ping_timer_force_agent_pkg.sv
+      - ping_timer_force_seq_item.svh: {is_include_file: true}
+      - ping_timer_force_driver.svh: {is_include_file: true}
+      - ping_timer_force_agent_cfg.svh: {is_include_file: true}
+      - ping_timer_force_agent.svh: {is_include_file: true}
+      - ping_timer_force_seq.svh: {is_include_file: true}
+      - ping_timer_force_if.sv
+      - ping_timer_force_bound_if.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+      - files_dv
