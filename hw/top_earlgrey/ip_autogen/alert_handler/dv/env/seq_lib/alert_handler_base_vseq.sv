@@ -32,6 +32,9 @@ class alert_handler_base_vseq extends cip_base_vseq #(
   // A sequencer to use to send LPG updates. Set this with set_sequencer() before calling start().
   protected lpg_sequencer m_lpg_sequencer;
 
+  // A sequencer to use in a sequence that forces an input signal on a ping timer
+  protected ping_timer_force_sequencer m_ping_timer_force_sequencer;
+
   // various knobs to enable certain routines
   bit do_alert_handler_init = 1'b0;
   bit config_locked         = 1'b0;
@@ -45,9 +48,17 @@ class alert_handler_base_vseq extends cip_base_vseq #(
     m_lpg_sequencer = sequencer;
   endfunction
 
+  // Set the sequencer for forcing ping timers
+  function void set_ping_timer_force_sequencer(ping_timer_force_sequencer sequencer);
+    m_ping_timer_force_sequencer = sequencer;
+  endfunction
+
   virtual task pre_start();
     if (m_lpg_sequencer == null) begin
       `uvm_fatal(get_full_name(), "m_lpg_sequencer has not been supplied")
+    end
+    if (m_ping_timer_force_sequencer == null) begin
+      `uvm_fatal(get_full_name(), "m_ping_timer_force_sequencer has not been supplied")
     end
     super.pre_start();
   endtask

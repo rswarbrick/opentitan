@@ -24,5 +24,6 @@ class ${module_instance_name}_base_test extends cip_base_test #(
     end
 
     vseq.set_lpg_sequencer(env.m_lpg_agent.sequencer);
+    vseq.set_ping_timer_force_sequencer(env.m_ping_timer_force_agent.sequencer);
   endfunction
 endclass : ${module_instance_name}_base_test
