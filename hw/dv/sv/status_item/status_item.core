@@ -1,0 +1,17 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:dv:status_item:0.1"
+description: "A simple UVM item to allow a driver to tell a sequence about interruptions"
+filesets:
+  files_dv:
+    files:
+      - status_item_pkg.sv
+      - status_item.svh: {is_include_file: true}
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+      - files_dv
