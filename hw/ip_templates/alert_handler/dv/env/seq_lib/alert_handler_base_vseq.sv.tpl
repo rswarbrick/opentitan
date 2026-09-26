@@ -182,13 +182,19 @@ class ${module_instance_name}_base_vseq extends cip_base_vseq #(
   // Not using "clear_all_interrupts" function in cip_base_vseq because of the signal integrity
   // error: after clearing intr_state, intr_state might come back to 1 in the next cycle.
   virtual task check_alert_interrupts();
-    bit [TL_DW-1:0] intr;
+    uvm_status_e txn_status;
+
     // Wait until there is no ping handshake.
     // This will avoid the case where interrupt is set and cleared at the same cycle.
-    `DV_WAIT((cfg.${module_instance_name}_vif.alert_ping_reqs || cfg.${module_instance_name}_vif.esc_ping_reqs) == 0)
-    csr_rd(.ptr(ral.intr_state), .value(intr));
-    `DV_WAIT((cfg.${module_instance_name}_vif.alert_ping_reqs || cfg.${module_instance_name}_vif.esc_ping_reqs) == 0)
-    csr_wr(.ptr(ral.intr_state), .value('1));
+    cfg.wait_no_ping_req();
+    ral.intr_state.mirror(txn_status);
+    if (cfg.under_reset) return;
+    if (txn_status != UVM_IS_OK) `uvm_error(get_full_name(), "Failed to mirror INTR_STATE.")
+
+    cfg.wait_no_ping_req();
+    ral.intr_state.write(txn_status, '1);
+    if (cfg.under_reset) return;
+    if (txn_status != UVM_IS_OK) `uvm_error(get_full_name(), "Failed to write INTR_STATE.")
   endtask
 
   virtual task clear_esc();

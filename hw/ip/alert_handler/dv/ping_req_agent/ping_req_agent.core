@@ -1,0 +1,23 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:dv:ping_req_agent:0.1"
+description: "An agent for monitoring ping request signals inside the alert_handler"
+filesets:
+  files_dv:
+    depend:
+      - lowrisc:dv:dv_base_agent
+    files:
+      - ping_req_agent_pkg.sv
+      - ping_req_seq_item.svh: {is_include_file: true}
+      - ping_req_monitor.svh: {is_include_file: true}
+      - ping_req_agent_cfg.svh: {is_include_file: true}
+      - ping_req_agent.svh: {is_include_file: true}
+      - ping_req_if.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+      - files_dv
