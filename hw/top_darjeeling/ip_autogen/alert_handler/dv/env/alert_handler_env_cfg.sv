@@ -11,6 +11,7 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
   rand alert_agent_cfg     alert_host_cfg[];
   rand esc_agent_cfg       esc_device_cfg[];
   lpg_agent_cfg            m_lpg_agent_cfg;
+  ping_req_agent_cfg       m_ping_req_agent_cfg;
 
   // The tracked state of an LPG (with mubi4_t booleans resolved as bits)
   typedef struct {
@@ -25,6 +26,16 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
   // / set_lpg_state.
   local lpg_state_t m_lpg_states[];
 
+  // The tracked state of alert ping requests (as observed by a bound-in ping_req_if). This is
+  // updated by the scoreboard calling update_alert_ping_req() and can be queried by calling
+  // get_alert_ping_req().
+  local bit [NUM_ALERTS-1:0] m_alert_ping_reqs;
+
+  // The tracked state of escalation ping requests (as observed by a bound-in ping_req_if). This is
+  // updated by the scoreboard calling update_esc_ping_req() and can be queried by calling
+  // get_esc_ping_req().
+  local bit [NUM_ESCS-1:0] m_esc_ping_reqs;
+
   alert_handler_vif alert_handler_vif;
 
   `uvm_object_utils_begin(alert_handler_env_cfg)
@@ -34,7 +45,11 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
 
   function new (string name="");
     super.new(name);
+
     m_lpg_agent_cfg = lpg_agent_cfg::type_id::create("m_lpg_agent_cfg");
+
+    m_ping_req_agent_cfg = ping_req_agent_cfg::type_id::create("m_ping_req_agent_cfg");
+    m_ping_req_agent_cfg.is_active = 1'b0;
   endfunction
 
   virtual function void initialize(bit inherit_ral_models = 1'b0);
@@ -57,6 +72,7 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
       esc_device_cfg[i] = esc_agent_cfg::type_id::create($sformatf("esc_device_cfg[%0d]", i));
       esc_device_cfg[i].if_mode  = dv_utils_pkg::Device;
     end
+
     // only support 1 outstanding TL items in tlul_adapter
     m_tl_agent_cfg.max_outstanding_req = 1;
   endfunction
@@ -113,4 +129,79 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
     get_lpg_state(lpg_idx, cg_en, rst_en);
     return cg_en || rst_en;
   endfunction
+
+  function void update_alert_ping_req(int unsigned idx, bit new_value);
+    if (idx >= $bits(m_alert_ping_reqs)) begin
+      `uvm_fatal("high_alert_idx",
+                 $sformatf({"Cannot update the ping request state for alert %0d: ",
+                            "there are only %0d alerts known."},
+                           idx, $bits(m_alert_ping_reqs)))
+    end
+    m_alert_ping_reqs[idx] = new_value;
+  endfunction
+
+  function bit get_alert_ping_req(int unsigned idx);
+    if (idx >= $bits(m_alert_ping_reqs)) begin
+      `uvm_fatal("high_alert_idx",
+                 $sformatf({"Cannot get the ping request state for alert %0d: ",
+                            "there are only %0d alerts known."},
+                           idx, $bits(m_alert_ping_reqs)))
+    end
+    return m_alert_ping_reqs[idx];
+  endfunction
+
+  function bit has_alert_ping_req(output int unsigned highest_idx);
+    if (|m_alert_ping_reqs) begin
+      highest_idx = $clog2(m_alert_ping_reqs);
+      return 1'b1;
+    end
+    return 1'b0;
+  endfunction
+
+  function void clear_alert_ping_reqs();
+    m_alert_ping_reqs = '0;
+  endfunction
+
+  local task wait_no_alert_ping_req();
+    wait(~|m_alert_ping_reqs);
+  endtask
+
+  function void update_esc_ping_req(int unsigned idx, bit new_value);
+    if (idx >= $bits(m_esc_ping_reqs)) begin
+      `uvm_fatal("high_esc_idx",
+                 $sformatf({"Cannot update the ping request state for escalation %0d: ",
+                            "there are only %0d escalations known."},
+                           idx, $bits(m_esc_ping_reqs)))
+    end
+    m_esc_ping_reqs[idx] = new_value;
+  endfunction
+
+  function bit get_esc_ping_req(int unsigned idx);
+    if (idx >= $bits(m_esc_ping_reqs)) begin
+      `uvm_fatal("high_esc_idx",
+                 $sformatf({"Cannot get the ping request state for escalation %0d: ",
+                            "there are only %0d escalationss known."},
+                           idx, $bits(m_esc_ping_reqs)))
+    end
+    return m_esc_ping_reqs[idx];
+  endfunction
+
+  function bit has_esc_ping_req();
+    return (|m_alert_ping_reqs);
+  endfunction
+
+  function void clear_esc_ping_reqs();
+    m_esc_ping_reqs = '0;
+  endfunction
+
+  local task wait_no_esc_ping_req();
+    wait(~|m_esc_ping_reqs);
+  endtask
+
+  task wait_no_ping_req();
+    fork
+      wait_no_alert_ping_req();
+      wait_no_esc_ping_req();
+    join
+  endtask
 endclass

@@ -18,6 +18,9 @@ class ${module_instance_name}_env extends cip_base_env #(
   // An agent for the interface that configures LPGs for alert_handler
   lpg_agent m_lpg_agent;
 
+  // A passive agent for the interface that reports ping requests inside alert_handler
+  ping_req_agent m_ping_req_agent;
+
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
 
@@ -46,6 +49,10 @@ class ${module_instance_name}_env extends cip_base_env #(
     m_lpg_agent = lpg_agent::type_id::create("m_lpg_agent", this);
     m_lpg_agent.cfg = cfg.m_lpg_agent_cfg;
 
+    // Build ping request agent
+    m_ping_req_agent = ping_req_agent::type_id::create("m_ping_req_agent", this);
+    m_ping_req_agent.cfg = cfg.m_ping_req_agent_cfg;
+
     // Get vifs
     if (!uvm_config_db#(crashdump_vif)::get(this, "", "crashdump_vif", cfg.crashdump_vif)) begin
       `uvm_fatal("no_vif", "Failed to get crashdump_vif from uvm_config_db")
@@ -56,6 +63,10 @@ class ${module_instance_name}_env extends cip_base_env #(
     end
     if (!uvm_config_db#(virtual lpg_if)::get(this, "", "lpg_vif", cfg.m_lpg_agent_cfg.vif)) begin
       `uvm_fatal("no_vif", "Failed to get lpg_vif from uvm_config_db.")
+    end
+    if (!uvm_config_db#(virtual ping_req_if)::get(this, "", "ping_req_vif",
+                                                  cfg.m_ping_req_agent_cfg.vif)) begin
+      `uvm_fatal("no_vif", "Failed to get ping_req_vif from uvm_config_db.")
     end
   endfunction
 
@@ -83,6 +94,7 @@ class ${module_instance_name}_env extends cip_base_env #(
     end
 
     m_lpg_agent.m_analysis_port.connect(scoreboard.m_lpg_imp);
+    m_ping_req_agent.m_analysis_port.connect(scoreboard.m_ping_req_imp);
   endfunction
 
 endclass
