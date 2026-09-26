@@ -8,6 +8,7 @@
        ral.class``i``_phase2_cyc_shadowed, ral.class``i``_phase3_cyc_shadowed};
 
 `uvm_analysis_imp_decl(_lpg)
+`uvm_analysis_imp_decl(_ping_req)
 
 class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     .CFG_T(${module_instance_name}_env_cfg),
@@ -54,6 +55,9 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // An import for LPG changes seen by the lpg_monitor
   uvm_analysis_imp_lpg #(lpg_seq_item, ${module_instance_name}_scoreboard) m_lpg_imp;
 
+  // An import for changes to ping request state
+  uvm_analysis_imp_ping_req #(ping_req_seq_item, ${module_instance_name}_scoreboard) m_ping_req_imp;
+
   `uvm_component_new
 
   function void build_phase(uvm_phase phase);
@@ -68,6 +72,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     foreach (esc_fifo[i])   esc_fifo[i]   = new($sformatf("esc_fifo[%0d]"  , i), this);
 
     m_lpg_imp = new("m_lpg_imp", this);
+    m_ping_req_imp = new("m_ping_req_imp", this);
   endfunction
 
   function void connect_phase(uvm_phase phase);
@@ -192,6 +197,26 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     cfg.set_lpg_state(item.m_lpg_idx,
                       mubi4_test_true_strict(mubi4_t'(item.m_cg_en)),
                       mubi4_test_true_strict(mubi4_t'(item.m_rst_en)));
+  endfunction
+
+  function void write_ping_req(ping_req_seq_item item);
+    import ping_req_agent_pkg::AlertPingReq, ping_req_agent_pkg::EscPingReq;
+    import ping_req_agent_pkg::PingReqStart, ping_req_agent_pkg::PingReqEnd;
+
+    bit new_state;
+    case (item.m_req_stage)
+      PingReqStart: new_state = 1'b1;
+      PingReqEnd:   new_state = 1'b0;
+      default: `uvm_fatal("bad_stage",
+                          $sformatf("Unknown req_stage_e value: %0d", item.m_req_stage))
+    endcase
+
+    case (item.m_req_type)
+      AlertPingReq: cfg.update_alert_ping_req(item.m_idx, new_state);
+      EscPingReq:   cfg.update_esc_ping_req(item.m_idx, new_state);
+      default: `uvm_fatal("bad_req_type",
+                          $sformatf("Unknown req_type_e value: %0d", item.m_req_type))
+    endcase
   endfunction
 
   virtual task check_edn_request_cycles();
@@ -552,26 +577,31 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // ping requests. But the probed signal will still set to 1.
   virtual task check_ping_triggered_cycles();
     int ping_wait_cycs;
+
     while (ping_wait_cycs <= MAX_PING_WAIT_CYCLES * 2) begin
-    if (cfg.${module_instance_name}_vif.alert_ping_reqs > 0) begin
-      if (cfg.en_cov) begin
-        int alert_id = $clog2(cfg.${module_instance_name}_vif.alert_ping_reqs);
-        cov.ping_with_lpg_cg_wrap[alert_id].alert_ping_with_lpg_cg.sample(
-            cfg.alert_host_cfg[alert_id].en_alert_lpg);
+      int unsigned alert_id;
+
+      if (cfg.has_alert_ping_req(alert_id)) begin
+        if (cfg.en_cov) begin
+          cov.ping_with_lpg_cg_wrap[alert_id].alert_ping_with_lpg_cg.sample(
+              cfg.alert_host_cfg[alert_id].en_alert_lpg);
+        end
+        break;
       end
-      break;
-    end
-    if (cfg.${module_instance_name}_vif.esc_ping_reqs > 0) break;
+
+      if (cfg.has_esc_ping_req()) break;
+
       cfg.clk_rst_vif.wait_clks(1);
       ping_wait_cycs++;
     end
+
     if (ping_wait_cycs > MAX_PING_WAIT_CYCLES * 2) begin
       `uvm_error(`gfn, "Timeout occured waiting for a ping.");
     end
     if (cfg.en_cov) cov.cycles_between_pings_cg.sample(ping_wait_cycs);
 
     // Wait for ping request to finish to avoid infinite loop.
-    wait (cfg.${module_instance_name}_vif.alert_ping_reqs == 0 && cfg.${module_instance_name}_vif.esc_ping_reqs == 0);
+    cfg.wait_no_ping_req();
   endtask
 
   virtual task check_crashdump();
@@ -765,6 +795,9 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     for (int unsigned i = 0; i < cfg.m_lpg_agent_cfg.vif.num_lpgs; i++) begin
       cfg.set_lpg_state(i, 0, 0);
     end
+
+    cfg.clear_alert_ping_reqs();
+    cfg.clear_esc_ping_reqs();
   endfunction
 
   // clear accumulative counters, and escalation counters if they are under escalation
