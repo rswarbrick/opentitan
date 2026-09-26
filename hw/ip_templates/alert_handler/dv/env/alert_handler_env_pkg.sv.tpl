@@ -24,6 +24,10 @@ package ${module_instance_name}_env_pkg;
   import lpg_agent_pkg::lpg_agent_cfg;
   import lpg_agent_pkg::lpg_agent;
 
+  import ping_req_agent_pkg::ping_req_seq_item;
+  import ping_req_agent_pkg::ping_req_agent_cfg;
+  import ping_req_agent_pkg::ping_req_agent;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
