@@ -28,6 +28,10 @@ package ${module_instance_name}_env_pkg;
   import ping_req_agent_pkg::ping_req_agent_cfg;
   import ping_req_agent_pkg::ping_req_agent;
 
+  import ping_timer_force_agent_pkg::ping_timer_force_sequencer;
+  import ping_timer_force_agent_pkg::ping_timer_force_agent_cfg;
+  import ping_timer_force_agent_pkg::ping_timer_force_agent;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
@@ -103,9 +107,6 @@ package ${module_instance_name}_env_pkg;
   // forward declare classes to allow typedefs below
   typedef virtual pins_if #(NUM_MAX_ESC_SEV) esc_en_vif;
   typedef virtual pins_if #(NUM_CRASHDUMP) crashdump_vif;
-  typedef virtual ${module_instance_name}_if ${module_instance_name}_vif;
-
-  // functions
 
   // package sources
   `include "${module_instance_name}_env_cfg.sv"

@@ -25,12 +25,16 @@ module tb;
   pins_if #(NUM_MAX_INTERRUPTS) intr_if(interrupts);
   pins_if #(NUM_CRASHDUMP) crashdump_if(crashdump);
   tl_if tl_if(.clk(clk), .rst_n(rst_n));
-  ${module_instance_name}_if ${module_instance_name}_if(.clk(clk), .rst_n(rst_n));
   esc_if       esc_device_if [NUM_ESCS](.clk(clk), .rst_n(rst_n));
   alert_if     alert_host_if [NUM_ALERTS](.clk(clk), .rst_n(rst_n));
   esc_probe_if probe_if[NUM_ESCS](.clk(clk), .rst_n(rst_n));
   lpg_if       lpg_if(.clk(clk), .rst_n(rst_n));
   ping_req_if  ping_req_if(.clk(clk), .rst_n(rst_n));
+
+  // Bind an instance of ping_timer_force_bound_if into the alert_handler_ping_timer inside the dut.
+  bind dut.u_ping_timer
+    ping_timer_force_bound_if #(.Bound(1))
+    u_bound_if (.clk_i, .rst_ni);
 
   // dut signals
   prim_alert_pkg::alert_rx_t [NUM_ALERTS-1:0] alert_rx;
@@ -106,10 +110,10 @@ module tb;
     uvm_config_db#(intr_vif)::set(null, "*.env", "intr_vif", intr_if);
     uvm_config_db#(crashdump_vif)::set(null, "*.env", "crashdump_vif", crashdump_if);
     uvm_config_db#(virtual tl_if)::set(null, "*.env.m_tl_agent*", "vif", tl_if);
-    uvm_config_db#(virtual ${module_instance_name}_if)::set(null, "*.env", "${module_instance_name}_vif",
-                   ${module_instance_name}_if);
     uvm_config_db#(virtual lpg_if)::set(null, "*.env", "lpg_vif", lpg_if);
     uvm_config_db#(virtual ping_req_if)::set(null, "*.env", "ping_req_vif", ping_req_if);
+    uvm_config_db#(virtual ping_timer_force_if)::set(
+      null, "*.env", "ping_timer_force_vif", dut.u_ping_timer.u_bound_if.gen_bound.u_force_if);
 
     $timeformat(-12, 0, " ps", 12);
     run_test();
