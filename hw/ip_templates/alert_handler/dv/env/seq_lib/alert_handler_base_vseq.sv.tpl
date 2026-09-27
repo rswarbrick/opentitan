@@ -82,24 +82,85 @@ class ${module_instance_name}_base_vseq extends cip_base_vseq #(
     // nothing special yet
   endtask
 
+  // Write the given value to the intr_enable register, which constrains which alert classes'
+  // interrupts are enabled.
+  local task write_intr_enable(bit [NUM_ALERT_CLASSES-1:0] value);
+    csr_wr(cfg.get_intr_enable(), value);
+  endtask
+
+  // Write the given enable bits to the registers in the alert_en multi-reg, to control which alerts
+  // are enabled.
+  local task write_alert_en(bit [NUM_ALERTS-1:0] value);
+    fork : isolation_fork begin
+      foreach (value[i]) begin
+        automatic uvm_reg register = cfg.get_alert_en_shadowed(i);
+        automatic bit value_bit = value[i];
+        fork
+          csr_wr(register, value_bit);
+        join_none
+      end
+      wait fork;
+    end join
+  endtask
+
+  // Write the given values to the alert_class_shadowed_<n> registers (giving the alert class for
+  // each alert)
+  local task write_alert_class(bit [NUM_ALERTS-1:0][CLASS_DW-1:0] alert_classes);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_ALERTS; i++) begin
+        automatic int unsigned alert_idx = i;
+        fork
+          csr_wr(cfg.get_alert_class_shadowed(alert_idx), alert_classes[alert_idx]);
+        join_none
+      end
+      wait fork;
+    end join
+  endtask
+
+  // Write the given enable bits to the registers in the alert_en multi-reg, to control which local
+  // alerts are enabled.
+  local task write_loc_alert_en(bit [NUM_LOCAL_ALERTS-1:0] value);
+    fork : isolation_fork begin
+      foreach (value[i]) begin
+        automatic uvm_reg register = cfg.get_loc_alert_en_shadowed(i);
+        automatic bit value_bit = value[i];
+        fork
+          csr_wr(register, value_bit);
+        join_none
+      end
+      wait fork;
+    end join
+  endtask
+
+  // Write the given values to the loc_alert_class_shadowed_<n> registers (giving the alert class
+  // for each local alert)
+  local task write_loc_alert_class(bit [NUM_LOCAL_ALERTS-1:0][CLASS_DW-1:0] alert_classes);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_LOCAL_ALERTS; i++) begin
+        automatic int unsigned alert_idx = i;
+        fork
+          csr_wr(cfg.get_loc_alert_class_shadowed(alert_idx), alert_classes[alert_idx]);
+        join_none
+      end
+      wait fork;
+    end join
+  endtask
+
   // setup basic alert_handler features
   // alert_class default 0 -> all alert will trigger interrupt classA
-  virtual task alert_handler_init(
-      bit [NUM_ALERT_CLASSES-1:0]                       intr_en = '1,
-      bit [NUM_ALERTS-1:0]                              alert_en = '1,
-      bit [NUM_ALERTS-1:0][NUM_ALERT_CLASSES-1:0]       alert_class = 'h0,
-      bit [NUM_LOCAL_ALERTS-1:0]                        loc_alert_en = '1,
-      bit [NUM_LOCAL_ALERTS-1:0][NUM_ALERT_CLASSES-1:0] loc_alert_class = 'h0);
+  task alert_handler_init(bit [NUM_ALERT_CLASSES-1:0]              intr_en = '1,
+                          bit [NUM_ALERTS-1:0]                     alert_en = '1,
+                          bit [NUM_ALERTS-1:0][CLASS_DW-1:0]       alert_class = 'h0,
+                          bit [NUM_LOCAL_ALERTS-1:0]               loc_alert_en = '1,
+                          bit [NUM_LOCAL_ALERTS-1:0][CLASS_DW-1:0] loc_alert_class = 'h0);
 
-    csr_wr(.ptr(ral.intr_enable), .value(intr_en));
-    foreach (alert_en[i])        csr_wr(.ptr(ral.alert_en_shadowed[i]),
-                                        .value(alert_en[i]));
-    foreach (alert_class[i])     csr_wr(.ptr(ral.alert_class_shadowed[i]),
-                                        .value(alert_class[i]));
-    foreach (loc_alert_en[i])    csr_wr(.ptr(ral.loc_alert_en_shadowed[i]),
-                                        .value(loc_alert_en[i]));
-    foreach (loc_alert_class[i]) csr_wr(.ptr(ral.loc_alert_class_shadowed[i]),
-                                        .value(loc_alert_class[i]));
+    fork
+      write_intr_enable(intr_en);
+      write_alert_en(alert_en);
+      write_alert_class(alert_class);
+      write_loc_alert_en(loc_alert_en);
+      write_loc_alert_class(alert_class);
+    join
   endtask
 
   // Randomize and write the ctrl register for a class, but constraining the LOCK and EN fields to
