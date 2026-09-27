@@ -267,4 +267,9 @@ class ${module_instance_name}_env_cfg extends cip_base_env_cfg #(.RAL_T(${module
     end
     return register;
   endfunction
+
+  // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
+  function uvm_reg get_class_phase_cyc(string class_name, int unsigned phase);
+    return get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);
+  endfunction
 endclass
