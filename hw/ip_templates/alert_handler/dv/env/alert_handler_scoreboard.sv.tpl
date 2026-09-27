@@ -2,11 +2,6 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-`define ASSIGN_CLASS_PHASE_REGS(index, i) ${"\\"}
-  reg_esc_phase_cycs_per_class_q[``index``] = ${"\\"}
-      {ral.class``i``_phase0_cyc_shadowed, ral.class``i``_phase1_cyc_shadowed, ${"\\"}
-       ral.class``i``_phase2_cyc_shadowed, ral.class``i``_phase3_cyc_shadowed};
-
 `uvm_analysis_imp_decl(_lpg)
 `uvm_analysis_imp_decl(_ping_req)
 
@@ -23,7 +18,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // ---   B   -classb_phase0_cyc - classb_phase1_cyc - classb_phase2_cyc - classb_phase3_cyc --
   // ---   C   -classc_phase0_cyc - classc_phase1_cyc - classc_phase2_cyc - classc_phase3_cyc --
   // ---   D   -classd_phase0_cyc - classd_phase1_cyc - classd_phase2_cyc - classd_phase3_cyc --
-  dv_base_reg   reg_esc_phase_cycs_per_class_q[NUM_ALERT_CLASSES][$];
+  uvm_reg reg_esc_phase_cycs_per_class_q[NUM_ALERT_CLASSES][$];
 
   uvm_reg_field intr_state_fields[$];
   uvm_reg_field intr_state_field;
@@ -62,11 +57,11 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    ral.intr_state.get_fields(intr_state_fields);
-    `ASSIGN_CLASS_PHASE_REGS(0, a)
-    `ASSIGN_CLASS_PHASE_REGS(1, b)
-    `ASSIGN_CLASS_PHASE_REGS(2, c)
-    `ASSIGN_CLASS_PHASE_REGS(3, d)
+
+    cfg.get_intr_state_reg().get_fields(intr_state_fields);
+    for (int unsigned i = 0; i < class_name.size(); i++) begin
+      assign_class_phase_cyc_regs(i, class_name[i]);
+    end
 
     foreach (alert_fifo[i]) alert_fifo[i] = new($sformatf("alert_fifo[%0d]", i), this);
     foreach (esc_fifo[i])   esc_fifo[i]   = new($sformatf("esc_fifo[%0d]"  , i), this);
@@ -75,8 +70,15 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     m_ping_req_imp = new("m_ping_req_imp", this);
   endfunction
 
-  function void connect_phase(uvm_phase phase);
-    super.connect_phase(phase);
+  // Set an entry of reg_esc_phase_cycs_per_class_q to be the four phase registers for the given
+  // class.
+  local function void assign_class_phase_cyc_regs(int unsigned class_idx, string class_name);
+    reg_esc_phase_cycs_per_class_q[class_idx].delete();
+
+    for (int unsigned phase = 0; phase < 4; phase++) begin
+      uvm_reg register = get_class_phase_cyc(class_name, phase);
+      reg_esc_phase_cycs_per_class_q[class_idx].push_back(register);
+    end
   endfunction
 
   task run_phase(uvm_phase phase);
@@ -102,13 +104,13 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           bit alert_en, loc_alert_en;
           alert_seq_item act_item;
           alert_fifo[index].get(act_item);
-          alert_en = (ral.alert_en_shadowed[index].get_mirrored_value() &&
+          alert_en = (get_alert_en_shadowed(index).get_mirrored_value() &&
                       !cfg.is_lpg_low_power(lpg_index));
 
           // Check that ping mechanism will only ping alerts that have been enabled and locked.
           if (act_item.m_trans_type == AlertPingTrans) begin
             `DV_CHECK(alert_en, $sformatf("alert %0s ping triggered but not enabled", index))
-            `DV_CHECK((`gmv(ral.alert_regwen[index]) == 0),
+            `DV_CHECK((get_alert_regwen(index).get_mirrored_value() == 0),
                       $sformatf("alert %0s ping triggered but not locked", index))
           end
 
@@ -119,15 +121,15 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
               process_alert_sig(index, 0);
             // alert integrity fail
             end else if (act_item.m_trans_type == AlertIntFail) begin
-              loc_alert_en = ral.loc_alert_en_shadowed[LocalAlertIntFail].get_mirrored_value();
+              loc_alert_en = get_loc_alert_en_shadowed(LocalAlertIntFail).get_mirrored_value();
               if (loc_alert_en) process_alert_sig(index, 1, LocalAlertIntFail);
             end else if (act_item.m_trans_type == AlertPingTrans &&
                          act_item.m_ping_timeout) begin
-              loc_alert_en = ral.loc_alert_en_shadowed[LocalAlertPingFail].get_mirrored_value();
+              loc_alert_en = get_loc_alert_en_shadowed(LocalAlertPingFail).get_mirrored_value();
               if (loc_alert_en) begin
                 process_alert_sig(index, 1, LocalAlertPingFail);
                 `uvm_info(`gfn, $sformatf("alert %0d ping timeout, timeout_cyc reg is %0d",
-                          index, ral.ping_timeout_cyc_shadowed.get_mirrored_value()), UVM_LOW);
+                          index, get_ping_timeout_cyc_shadowed().get_mirrored_value()), UVM_LOW);
               end
             end
           end
@@ -150,16 +152,18 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           // escalation integrity fail
           end else if (act_item.m_trans_type == EscIntFail ||
                (act_item.m_esc_handshake_sta == EscHSIntFail && !act_item.m_ping_timeout)) begin
-            bit loc_alert_en = ral.loc_alert_en_shadowed[LocalEscIntFail].get_mirrored_value();
+            bit loc_alert_en = get_loc_alert_en_shadowed(LocalEscIntFail).get_mirrored_value();
             if (loc_alert_en) process_alert_sig(index, 1, LocalEscIntFail);
           // escalation ping timeout
           end else if (act_item.m_trans_type == EscPingTrans) begin
             if (act_item.m_ping_timeout) begin
-              bit loc_alert_en = ral.loc_alert_en_shadowed[LocalEscPingFail].get_mirrored_value();
+              bit loc_alert_en = get_loc_alert_en_shadowed(LocalEscPingFail).get_mirrored_value();
               if (loc_alert_en) begin
                 process_alert_sig(index, 1, LocalEscPingFail);
-                `uvm_info(`gfn, $sformatf("esc %0d ping timeout, timeout_cyc reg is %0d",
-                          index, ral.ping_timeout_cyc_shadowed.get_mirrored_value()), UVM_LOW);
+                `uvm_info(`gfn,
+                          $sformatf("esc %0d ping timeout, timeout_cyc reg is %0d",
+                                    index, get_ping_timeout_cyc_shadowed().get_mirrored_value()),
+                          UVM_LOW);
               end
             end
           end
@@ -253,15 +257,22 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           bit [TL_DW-1:0] intr_en, class_ctrl;
           bit [NUM_ALERT_CLASS_MSB:0] class_i;
           if (!is_int_err) begin
-            class_i = `gmv(ral.alert_class_shadowed[alert_i]);
-            void'(ral.alert_cause[alert_i].predict(1));
+            class_i = get_alert_class_shadowed(alert_i).get_mirrored_value();
+            if (!get_alert_cause(alert_i).predict(1)) begin
+              `uvm_fatal("prediction_failed",
+                         $sformatf("Failed to predict value for %0s.",
+                                   get_alert_cause(alert_i).get_name()))
+            end
             if (cfg.en_cov) begin
               cov.alert_cause_cg.sample(alert_i, class_i);
             end
           end else begin
-            class_i = `gmv(ral.loc_alert_class_shadowed[int'(local_alert_type)]);
-            void'(ral.loc_alert_cause[int'(local_alert_type)].predict(
-                .value(1), .kind(UVM_PREDICT_READ)));
+            class_i = get_loc_alert_class_shadowed(local_alert_type).get_mirrored_value();
+            if (!get_loc_alert_cause(local_alert_type).predict(1, UVM_PREDICT_READ)) begin
+              `uvm_fatal("prediction_failed",
+                         $sformatf("Failed to predict value for %0s.",
+                                   get_loc_alert_cause(local_alert_type).get_name()))
+            end
             if (local_alert_type inside {LocalAlertPingFail, LocalAlertIntFail}) begin
               if (cfg.en_cov) begin
                 cov.alert_loc_alert_cause_cg.sample(local_alert_type, alert_i, class_i);
@@ -279,10 +290,10 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
 
           intr_state_field = intr_state_fields[class_i];
           void'(intr_state_field.predict(.value(1), .kind(UVM_PREDICT_READ)));
-          intr_en = ral.intr_enable.get_mirrored_value();
+          intr_en = get_intr_enable().get_mirrored_value();
 
           // calculate escalation
-          class_ctrl = get_class_ctrl(class_i);
+          class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
           `uvm_info(`gfn, $sformatf("class %0d is triggered, class ctrl=%0h, under_esc=%0b",
                                     class_i, class_ctrl, under_esc_classes[class_i]), UVM_DEBUG)
           // if class escalation is enabled, add alert to accumulation count
@@ -312,7 +323,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // and if current class is not under escalation, then predict escalation
   // note: if more than one alerts triggered on the same clk cycle, only accumulates one
   virtual function void alert_accum_cal(int class_i);
-    bit [TL_DW-1:0] accum_thresh = get_class_accum_thresh(class_i);
+    bit [TL_DW-1:0] accum_thresh = get_class_accum_thresh(class_name[class_i]).get_mirrored_value();
     realtime curr_time = $realtime();
     if (curr_time != last_triggered_alert_per_class[class_i] && !cfg.under_reset) begin
       last_triggered_alert_per_class[class_i] = curr_time;
@@ -333,22 +344,19 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // if clren register is disabled, predict escalation signals by setting the corresponding
   // under_esc_classes bit based on class_ctrl's lock bit
   virtual function void predict_esc(int class_i);
-    bit [TL_DW-1:0] class_ctrl = get_class_ctrl(class_i);
+    bit [TL_DW-1:0] class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
     if (class_ctrl[AlertClassCtrlLock]) begin
-      uvm_reg clren_rg;
-      clren_rg = ral.get_reg_by_name($sformatf("class%s_clr_regwen", class_name[class_i]));
-      `DV_CHECK_NE_FATAL(clren_rg, null)
-      void'(clren_rg.predict(0));
+      void'(get_class_clr_regwen(class_name[class_i]).predict(0));
     end
     under_esc_classes[class_i] = 1;
   endfunction
 
   // check if escalation signal's duration length is correct
   virtual function void check_esc_signal(int cycle_cnt, int esc_sig_i);
-    int class_a = `gmv(ral.classa_ctrl_shadowed);
-    int class_b = `gmv(ral.classb_ctrl_shadowed);
-    int class_c = `gmv(ral.classc_ctrl_shadowed);
-    int class_d = `gmv(ral.classd_ctrl_shadowed);
+    int class_a = get_class_ctrl("a").get_mirrored_value();
+    int class_b = get_class_ctrl("b").get_mirrored_value();
+    int class_c = get_class_ctrl("c").get_mirrored_value();
+    int class_d = get_class_ctrl("d").get_mirrored_value();
     int sig_index = AlertClassCtrlEnE0+esc_sig_i;
     bit [NUM_ALERT_CLASSES-1:0] select_class = {class_d[sig_index], class_c[sig_index],
                                                 class_b[sig_index], class_a[sig_index]};
@@ -362,14 +370,12 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       // reflecting.
       for (class_i = 0; class_i < NUM_ALERT_CLASSES; class_i++) begin
         if (select_class[class_i] == 1) begin
-          phase = `gmv(ral.get_reg_by_name($sformatf("class%0s_ctrl_shadowed",
-                                                     class_name[class_i])));
+          phase = get_class_ctrl(class_name[class_i]).get_mirrored_value();
           break;
         end
       end
       phase = phase[(AlertClassCtrlMapE0 + esc_sig_i * 2) +: 2];
-      exp_cycle = `gmv(ral.get_reg_by_name($sformatf("class%0s_phase%0d_cyc_shadowed",
-                       class_name[class_i], phase))) + 1;
+      exp_cycle = get_class_phase_cyc(class_name[class_i], phase).get_mirrored_value() + 1;
       // Minimal phase length is 2 cycles.
       exp_cycle = exp_cycle < 2 ? 2 : exp_cycle;
       `uvm_info(`gfn, $sformatf("esc_signal_%0d, esc phase %0d, esc class %0d",
@@ -412,14 +418,22 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
         case (csr_name)
           // add individual case item for each csr
           "intr_test": begin
-            bit [TL_DW-1:0] intr_state_exp = item.a_data | ral.intr_state.get_mirrored_value();
+            uvm_reg         intr_state = cfg.ral.get_reg_by_name("intr_state");
+            bit [TL_DW-1:0] intr_state_exp;
+
+            if (intr_state == null) `uvm_fatal("no_reg", "Cannot get intr_state register.")
+
+            intr_state_exp = intr_state.get_mirrored_value() | item.a_data;
+
             if (cfg.en_cov) begin
-              bit [TL_DW-1:0] intr_en = ral.intr_enable.get_mirrored_value();
+              bit [TL_DW-1:0] intr_en = get_intr_enable().get_mirrored_value();
               for (int i = 0; i < NUM_ALERT_CLASSES; i++) begin
                 cov.intr_test_cg.sample(i, item.a_data[i], intr_en[i], intr_state_exp[i]);
               end
             end
-            void'(ral.intr_state.predict(.value(intr_state_exp), .kind(UVM_PREDICT_DIRECT)));
+            if (!intr_state.predict(intr_state_exp)) begin
+              `uvm_fatal("prediction_failed", "Failed to predict intr_state register.")
+            end
           end
           // disable intr_enable or clear intr_state will clear the interrupt timeout cnter
           "intr_state": begin
@@ -447,30 +461,14 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
               if (item.a_data[i] == 0) under_intr_classes[i] = 0;
             end
           end
-          "classa_clr_shadowed": begin
-            if (!dv_base_csr.is_staged() && ral.classa_clr_regwen.get_mirrored_value()) begin
-              clr_reset_esc_class(0);
-            end
-          end
-          "classb_clr_shadowed": begin
-            if (!dv_base_csr.is_staged() && ral.classb_clr_regwen.get_mirrored_value()) begin
-              clr_reset_esc_class(1);
-            end
-          end
-          "classc_clr_shadowed": begin
-            if (!dv_base_csr.is_staged() && ral.classc_clr_regwen.get_mirrored_value()) begin
-              clr_reset_esc_class(2);
-            end
-          end
-          "classd_clr_shadowed": begin
-            if (!dv_base_csr.is_staged() && ral.classd_clr_regwen.get_mirrored_value()) begin
-              clr_reset_esc_class(3);
-            end
-          end
+          "classa_clr_shadowed": on_class_clr_shadowed_write(0);
+          "classb_clr_shadowed": on_class_clr_shadowed_write(1);
+          "classc_clr_shadowed": on_class_clr_shadowed_write(2);
+          "classd_clr_shadowed": on_class_clr_shadowed_write(3);
           "ping_timer_en_shadowed": begin
             if (shadowed_reg_wr_completed(dv_base_csr) &&
                 item.a_data &&
-                `gmv(ral.ping_timer_regwen)) begin
+                get_ping_timer_regwen().get_mirrored_value()) begin
               ping_timer_en = 1;
             end
           end
@@ -505,7 +503,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       if (channel == DataChannel) begin
         if (cfg.en_cov) begin
           if (csr.get_name() == "intr_state") begin
-            bit [TL_DW-1:0] intr_en = ral.intr_enable.get_mirrored_value();
+            bit [TL_DW-1:0] intr_en = get_intr_enable().get_mirrored_value();
             for (int i = 0; i < NUM_ALERT_CLASSES; i++) begin
               cov.intr_cg.sample(i, intr_en[i], item.d_data[i]);
               cov.intr_pins_cg.sample(i, cfg.intr_vif.pins[i]);
@@ -542,6 +540,29 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       end
     end
   endtask
+
+  // Update the model for the indexed class after a write to its class*_clr_shadowed register
+  //
+  // Since the scoreboard calls this for both writes to the shadowed register, it can return
+  // immediately if the register has just become staged.
+  local function void on_class_clr_shadowed_write(int unsigned class_idx);
+    uvm_reg     regwen = get_class_clr_regwen(class_name[class_idx]);
+    uvm_reg     csr_base = get_class_clr(class_name[class_idx]);
+    dv_base_reg csr;
+
+    if (!$cast(csr, csr_base)) begin
+      `uvm_fatal("base_csr",
+                 $sformatf("The register %0s is not a dv_base_reg.", csr_base.get_name()))
+    end
+
+    if (!csr.is_staged() && regwen.get_mirrored_value()) begin
+      // Trigger a process that clears accum and escalation counters for the class. This process
+      // consumes time and lasts two cycles.
+      fork
+        clr_reset_esc_class(class_idx);
+      join_none
+    end
+  endfunction
 
   virtual task check_ping_timer();
     int num_checked_pings;
@@ -623,11 +644,11 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           end
 
           foreach (crashdump_val.class_esc_state[i]) begin
-            uvm_reg crashdump_trigger_csr = ral.get_reg_by_name(
-                    $sformatf("class%0s_crashdump_trigger_shadowed", class_name[i]));
-            if (crashdump_val.class_esc_state[i] == (`gmv(crashdump_trigger_csr) + 3'b100)) begin
+            uvm_reg_data_t trig_val;
+            trig_val = get_class_crashdump_trigger(class_name[i]).get_mirrored_value();
+            if (crashdump_val.class_esc_state[i] == (trig_val + 3'b100)) begin
               crashdump_triggered[i] = 1;
-              if (cfg.en_cov) cov.crashdump_trigger_cg.sample(`gmv(crashdump_trigger_csr));
+              if (cfg.en_cov) cov.crashdump_trigger_cg.sample(trig_val);
               break;
              end
           end
@@ -635,23 +656,24 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           // Check that the value that came from the crashdump reflects the alert_cause and
           // loc_alert_cause registers that we have predicted in the register model.
           for (int i = 0; i < NUM_ALERTS; i++) begin
-            if (crashdump_val.alert_cause[i] != `gmv(ral.alert_cause[i])) begin
+            if (crashdump_val.alert_cause[i] != get_alert_cause(i).get_mirrored_value()) begin
               `uvm_error(get_full_name(),
                          $sformatf({"Register/crashdump mismatch. alert_cause[%0d] is ",
                                     "0x%0h in the crashdump and 0x%0h in the register model."},
                                    i,
                                    crashdump_val.alert_cause[i],
-                                   `gmv(ral.alert_cause[i])))
+                                   get_alert_cause(i).get_mirrored_value()))
             end
           end
           for (int i = 0; i < NUM_LOCAL_ALERTS; i++) begin
-            if (crashdump_val.loc_alert_cause[i] != `gmv(ral.loc_alert_cause[i])) begin
+            if (crashdump_val.loc_alert_cause[i] !=
+                get_loc_alert_cause(i).get_mirrored_value()) begin
               `uvm_error(get_full_name(),
                          $sformatf({"Register/crashdump mismatch. loc_alert_cause[%0d] is ",
                                     "0x%0h in the crashdump and 0x%0h in the register model."},
                                    i,
                                    crashdump_val.loc_alert_cause[i],
-                                   `gmv(ral.loc_alert_cause[i])))
+                                   get_loc_alert_cause(i).get_mirrored_value()))
             end
           end
         end
@@ -676,12 +698,12 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
                 clr_esc_under_intr[class_i] = 0;
                 // wait a clk for esc signal to go high
                 cfg.clk_rst_vif.wait_n_clks(1);
-                class_ctrl = get_class_ctrl(class_i);
+                class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
                 if (class_ctrl[AlertClassCtrlEn] &&
                     class_ctrl[AlertClassCtrlEnE3:AlertClassCtrlEnE0] > 0) begin
                   intr_cnter_per_class[class_i] = 1;
                   `uvm_info(`gfn, $sformatf("Class %0d start counter", class_i), UVM_HIGH)
-                  timeout_cyc = get_class_timeout_cyc(class_i);
+                  timeout_cyc = get_class_timeout_cyc(class_i).get_mirrored_value();
                   if (timeout_cyc > 0) begin
                     state_per_class[class_i] = EscStateTimeout;
                     while (under_intr_classes[class_i]) begin
@@ -721,8 +743,10 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
               begin : inc_esc_cnt
                 for (int phase_i = 0; phase_i < NUM_ESC_PHASES; phase_i++) begin
                   int phase_thresh = `gmv(reg_esc_phase_cycs_per_class_q[class_i][phase_i]);
-                  bit[TL_DW-1:0] class_ctrl = get_class_ctrl(class_i);
+                  bit [TL_DW-1:0] class_ctrl;
                   int enabled_sig_q[$];
+
+                  class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
                   for (int sig_i = 0; sig_i < NUM_ESC_SIGNALS; sig_i++) begin
                     if (class_ctrl[sig_i*2+7 -: 2] == phase_i && class_ctrl[sig_i+2]) begin
                       enabled_sig_q.push_back(sig_i);
@@ -829,34 +853,127 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     super.check_phase(phase);
   endfunction
 
-  // get class_ctrl register mirrored value by class
-  function bit [TL_DW-1:0] get_class_ctrl(int class_i);
-    uvm_reg class_ctrl_rg;
-    class_ctrl_rg = ral.get_reg_by_name($sformatf("class%s_ctrl_shadowed", class_name[class_i]));
-    `DV_CHECK_NE_FATAL(class_ctrl_rg, null)
-    return class_ctrl_rg.get_mirrored_value();
-  endfunction
-
-  // get class_accum_thresh register mirrored value by class
-  function bit [TL_DW-1:0] get_class_accum_thresh(int class_i);
-    uvm_reg class_thresh_rg;
-    class_thresh_rg = ral.get_reg_by_name($sformatf("class%s_accum_thresh_shadowed",
-                                                    class_name[class_i]));
-    `DV_CHECK_NE_FATAL(class_thresh_rg, null)
-    return class_thresh_rg.get_mirrored_value();
-  endfunction
-
-  // get class_timeout_cyc register mirrored value by class
-  function bit [TL_DW-1:0] get_class_timeout_cyc(int class_i);
-    dv_base_reg class_timeout_rg =
-        ral.get_dv_base_reg_by_name($sformatf("class%s_timeout_cyc_shadowed",
-                                              class_name[class_i]));
-    return class_timeout_rg.get_mirrored_value();
-  endfunction
-
   function bit shadowed_reg_wr_completed(dv_base_reg dv_base_reg);
     return (!dv_base_reg.is_staged() && !dv_base_reg.get_shadow_update_err());
   endfunction
 
+  // Get the requested entry from the named (non-compact) multireg.
+  local function uvm_reg get_multireg_register(string multireg_name, int unsigned idx);
+    string  reg_name = $sformatf("%0s_%0d", multireg_name, idx);
+    uvm_reg register = cfg.ral.get_reg_by_name(reg_name);
+
+    if (register == null) begin
+      `uvm_fatal("bad_multireg_idx",
+                 $sformatf({"Cannot find the register with index %0d ",
+                            "in the multireg '%0s', which would have name '%0s'."},
+                           idx, multireg_name, reg_name))
+    end
+    return register;
+  endfunction
+
+  // Get the requested register from the alert_en_shadowed multireg
+  local function uvm_reg get_alert_en_shadowed(int unsigned idx);
+    return get_multireg_register("alert_en_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the loc_alert_en_shadowed multireg
+  local function uvm_reg get_loc_alert_en_shadowed(int unsigned idx);
+    return get_multireg_register("loc_alert_en_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the alert_regwen multireg
+  local function uvm_reg get_alert_regwen(int unsigned idx);
+    return get_multireg_register("alert_regwen", idx);
+  endfunction
+
+  // Get the requested register from the alert_class_shadowed multireg
+  local function uvm_reg get_alert_class_shadowed(int unsigned idx);
+    return get_multireg_register("alert_class_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the alert_cause multireg
+  local function uvm_reg get_alert_cause(int unsigned idx);
+    return get_multireg_register("alert_cause", idx);
+  endfunction
+
+  // Get the requested register from the loc_alert_class_shadowed multireg
+  local function uvm_reg get_loc_alert_class_shadowed(int unsigned idx);
+    return get_multireg_register("loc_alert_class_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the loc_alert_cause multireg
+  local function uvm_reg get_loc_alert_cause(int unsigned idx);
+    return get_multireg_register("loc_alert_cause", idx);
+  endfunction
+
+  // Get the a class-specific register for the given class
+  local function uvm_reg get_class_reg(string reg_name, string class_name);
+    string  full_reg_name = $sformatf("class%0s_%0s", class_name, reg_name);
+    uvm_reg register = cfg.ral.get_reg_by_name(full_reg_name);
+
+    if (register == null) begin
+      `uvm_fatal("bad_class_reg",
+                 $sformatf({"Cannot find the class-specific register '%0s' ",
+                            "for the class '%0s', which would have name '%0s'."},
+                           reg_name, class_name, full_reg_name))
+    end
+    return register;
+  endfunction
+
+  // Get the ctrl_shadowed register for the given class
+  local function uvm_reg get_class_ctrl(string class_name);
+    return get_class_reg("ctrl_shadowed", class_name);
+  endfunction
+
+  // Get the clr_shadowed register for the given class
+  local function uvm_reg get_class_clr(string class_name);
+    return get_class_reg("clr_shadowed", class_name);
+  endfunction
+
+  // Get the clr_regwen register for the given class
+  local function uvm_reg get_class_clr_regwen(string class_name);
+    return get_class_reg("clr_regwen", class_name);
+  endfunction
+
+  // Get the crashdump_trigger_shadowed register for the given class
+  local function uvm_reg get_class_crashdump_trigger(string class_name);
+    return get_class_reg("crashdump_trigger_shadowed", class_name);
+  endfunction
+
+  // Get the accum_thresh register for the given class
+  local function uvm_reg get_class_accum_thresh(string class_name);
+    return get_class_reg("accum_thresh_shadowed", class_name);
+  endfunction
+
+  // Get the timeout_cyc register for the given class
+  local function uvm_reg get_class_timeout_cyc(string class_name);
+    return get_class_reg("timeout_cyc_shadowed", class_name);
+  endfunction
+
+  // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
+  local function uvm_reg get_class_phase_cyc(string class_name, int unsigned phase);
+    return get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);
+  endfunction
+
+  // Get the ping_timeout_cyc_shadowed register
+  function uvm_reg get_ping_timeout_cyc_shadowed();
+    uvm_reg register = cfg.ral.get_reg_by_name("ping_timeout_cyc_shadowed");
+    if (register == null) `uvm_fatal("no_reg", "Cannot find ping_timeout_cyc_shadowed register.")
+    return register;
+  endfunction
+
+  // Get the intr_enable register
+  function uvm_reg get_intr_enable();
+    uvm_reg register = cfg.ral.get_reg_by_name("intr_enable");
+    if (register == null) `uvm_fatal("no_reg", "Cannot find intr_enable register.")
+    return register;
+  endfunction
+
+  // Get the ping_timer_regwen register
+  function uvm_reg get_ping_timer_regwen();
+    uvm_reg register = cfg.ral.get_reg_by_name("ping_timer_regwen");
+    if (register == null) `uvm_fatal("no_reg", "Cannot find ping_timer_regwen register.")
+    return register;
+  endfunction
+
 endclass
-`undef ASSIGN_CLASS_PHASE_REGS
