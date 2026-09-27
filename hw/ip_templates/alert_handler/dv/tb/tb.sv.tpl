@@ -57,7 +57,6 @@ module tb;
     end
   end
 
-
   for (genvar k = 0; k < NUM_ESCS; k++) begin : gen_esc_if
     assign esc_rx[k].resp_p = esc_device_if[k].esc_rx.resp_p;
     assign esc_rx[k].resp_n = esc_device_if[k].esc_rx.resp_n;
@@ -70,6 +69,19 @@ module tb;
                                           "vif", esc_device_if[k]);
       uvm_config_db#(virtual esc_probe_if)::set(null, $sformatf("*.env.esc_device_agent[%0d]", k),
                                                 "probe_vif", probe_if[k]);
+    end
+  end
+
+  for (genvar k = 0; k < N_CLASSES; k++) begin : gen_classes
+    bind dut.gen_classes[k].u_accu
+      force_class_accum_bound_if #(.Bound(1), .AccuCntDw(AccuCntDw))
+      u_bound_if (.clk_i, .rst_ni);
+
+    initial begin
+      uvm_config_db#(virtual force_class_accum_if)::set(
+        null, $sformatf("*.env.m_force_class_accum_agents[%0d]", k), "vif",
+        dut.gen_classes[k].u_accu.u_bound_if.gen_bound.u_force_if
+      );
     end
   end
 
