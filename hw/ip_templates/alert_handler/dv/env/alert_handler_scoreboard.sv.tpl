@@ -62,7 +62,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       reg_esc_phase_cycs_per_class_q[i].delete();
 
       for (int unsigned phase = 0; phase < 4; phase++) begin
-        uvm_reg register = get_class_phase_cyc(cfg.m_class_names[i], phase);
+        uvm_reg register = cfg.get_class_phase_cyc(cfg.m_class_names[i], phase);
         reg_esc_phase_cycs_per_class_q[i].push_back(register);
       end
     end
@@ -359,7 +359,9 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     // Only compare the escalation signal length if exactly one class is assigned to this signal.
     // Otherwise scb cannot predict the accurate cycle length if multiple classes are merged.
     if ($countones(select_class) == 1) begin
-      int exp_cycle, phase, class_i;
+      uvm_reg phase_cyc_reg;
+      int     class_i, phase, exp_cycle;
+
       // Find the class that triggers the escalation, and find which phase the escalation signal is
       // reflecting.
       for (class_i = 0; class_i < NUM_ALERT_CLASSES; class_i++) begin
@@ -368,12 +370,18 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           break;
         end
       end
-      phase = phase[(AlertClassCtrlMapE0 + esc_sig_i * 2) +: 2];
-      exp_cycle = get_class_phase_cyc(cfg.m_class_names[class_i], phase).get_mirrored_value() + 1;
+
+      phase         = phase[(AlertClassCtrlMapE0 + esc_sig_i * 2) +: 2];
+      phase_cyc_reg = cfg.get_class_phase_cyc(cfg.m_class_names[class_i], phase);
+      exp_cycle     = phase_cyc_reg.get_mirrored_value() + 1;
+
       // Minimal phase length is 2 cycles.
-      exp_cycle = exp_cycle < 2 ? 2 : exp_cycle;
-      `uvm_info(`gfn, $sformatf("esc_signal_%0d, esc phase %0d, esc class %0d",
-                esc_sig_i, phase, class_i), UVM_HIGH);
+      if (exp_cycle < 2) exp_cycle = 2;
+
+      `uvm_info(`gfn,
+                $sformatf("esc_signal_%0d, esc phase %0d, esc class %0d",
+                          esc_sig_i, phase, class_i),
+                UVM_HIGH);
 
       // If the escalation signal is interrupted by reset or esc_clear, we expect the signal length
       // to be shorter than the phase_cycle_length.
@@ -931,11 +939,6 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // Get the timeout_cyc register for the given class
   local function uvm_reg get_class_timeout_cyc(string class_name);
     return cfg.get_class_reg("timeout_cyc_shadowed", class_name);
-  endfunction
-
-  // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
-  local function uvm_reg get_class_phase_cyc(string class_name, int unsigned phase);
-    return cfg.get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);
   endfunction
 
   // Get the ping_timeout_cyc_shadowed register
