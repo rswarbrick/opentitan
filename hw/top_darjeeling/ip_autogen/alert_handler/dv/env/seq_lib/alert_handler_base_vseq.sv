@@ -2,11 +2,6 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-`define RAND_WRITE_CLASS_CTRL(i, en_bit, lock_bit) \
-  `DV_CHECK_RANDOMIZE_WITH_FATAL(ral.class``i``_ctrl_shadowed, \
-                                 en.value == en_bit; lock.value == lock_bit;)  \
-  csr_wr(.ptr(ral.class``i``_ctrl_shadowed), .value(ral.class``i``_ctrl_shadowed.get()));
-
 class alert_handler_base_vseq extends cip_base_vseq #(
     .CFG_T               (alert_handler_env_cfg),
     .RAL_T               (alert_handler_reg_block),
@@ -107,12 +102,57 @@ class alert_handler_base_vseq extends cip_base_vseq #(
                                         .value(loc_alert_class[i]));
   endtask
 
-  virtual task alert_handler_rand_wr_class_ctrl(bit [NUM_ALERT_CLASSES-1:0] lock_bit,
-                                                bit [NUM_ALERT_CLASSES-1:0] class_en);
-    `RAND_WRITE_CLASS_CTRL(a, class_en[0], lock_bit[0])
-    `RAND_WRITE_CLASS_CTRL(b, class_en[1], lock_bit[1])
-    `RAND_WRITE_CLASS_CTRL(c, class_en[2], lock_bit[2])
-    `RAND_WRITE_CLASS_CTRL(d, class_en[3], lock_bit[3])
+  // Randomize and write the ctrl register for a class, but constraining the LOCK and EN fields to
+  // have the provided values.
+  local task randomize_and_write_one_class_ctrl(int unsigned class_idx,
+                                                bit          lock_bit,
+                                                bit          class_en);
+    uvm_reg_field fields[$];
+    uvm_reg       register = cfg.get_class_ctrl(cfg.m_class_names[class_idx]);
+
+    register.get_fields(fields);
+
+    // Walk through the fields. Set LOCK and EN as expected, and disable randomisation for those
+    // fields.
+    foreach (fields[i]) begin
+      case (fields[i].get_name())
+        "lock": begin
+          fields[i].set(lock_bit);
+          fields[i].rand_mode(0);
+        end
+        "en": begin
+          fields[i].set(class_en);
+          fields[i].rand_mode(0);
+        end
+        default: begin end
+      endcase
+    end
+
+    // Now randomise the register, which won't touch the LOCK and EN fields that we just configured.
+    if (!register.randomize()) begin
+      `uvm_fatal(get_full_name(), $sformatf("Failed to randomize %0s.", register.get_name()))
+    end
+
+    // Re-enable randomisation of all the fields
+    foreach (fields[i]) fields[i].rand_mode(1);
+
+    // Finally, update the register to contain the value that we have just chosen.
+    csr_update(register);
+  endtask
+
+  // Randomize and write the CTRL_SHADOWED registers for the various alert classes, but constraining
+  // those classes' LOCK and EN fields to have the values in the lock_bit and class_en arguments.
+  task alert_handler_rand_wr_class_ctrl(bit [NUM_ALERT_CLASSES-1:0] lock_bit,
+                                        bit [NUM_ALERT_CLASSES-1:0] class_en);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_ALERT_CLASSES; i++) begin
+        automatic int unsigned class_idx = i;
+        fork
+          randomize_and_write_one_class_ctrl(class_idx, lock_bit[class_idx], class_en[class_idx]);
+        join_none
+      end
+      wait fork;
+    end join
   endtask
 
   virtual task alert_handler_wr_regwen_regs(bit [NUM_ALERT_CLASSES-1:0] regwen = 0,
@@ -537,5 +577,3 @@ class alert_handler_base_vseq extends cip_base_vseq #(
   endtask
 
 endclass : alert_handler_base_vseq
-
-`undef RAND_WRITE_CLASS_CTRL
