@@ -103,7 +103,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           // Check that ping mechanism will only ping alerts that have been enabled and locked.
           if (act_item.m_trans_type == AlertPingTrans) begin
             `DV_CHECK(alert_en, $sformatf("alert %0s ping triggered but not enabled", index))
-            `DV_CHECK((get_alert_regwen(index).get_mirrored_value() == 0),
+            `DV_CHECK((cfg.get_alert_regwen(index).get_mirrored_value() == 0),
                       $sformatf("alert %0s ping triggered but not locked", index))
           end
 
@@ -341,7 +341,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     string class_name = cfg.m_class_names[class_i];
     bit [TL_DW-1:0] class_ctrl = cfg.get_class_ctrl(class_name).get_mirrored_value();
     if (class_ctrl[AlertClassCtrlLock]) begin
-      void'(get_class_clr_regwen(class_name).predict(0));
+      void'(cfg.get_class_clr_regwen(class_name).predict(0));
     end
     under_esc_classes[class_i] = 1;
   endfunction
@@ -552,7 +552,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // immediately if the register has just become staged.
   local function void on_class_clr_shadowed_write(int unsigned class_idx);
     string      class_name = cfg.m_class_names[class_idx];
-    uvm_reg     regwen = get_class_clr_regwen(class_name);
+    uvm_reg     regwen = cfg.get_class_clr_regwen(class_name);
     uvm_reg     csr_base = get_class_clr(class_name);
     dv_base_reg csr;
 
@@ -863,11 +863,6 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     return (!dv_base_reg.is_staged() && !dv_base_reg.get_shadow_update_err());
   endfunction
 
-  // Get the requested register from the alert_regwen multireg
-  local function uvm_reg get_alert_regwen(int unsigned idx);
-    return cfg.get_multireg_register("alert_regwen", idx);
-  endfunction
-
   // Get the requested register from the alert_cause multireg
   local function uvm_reg get_alert_cause(int unsigned idx);
     return cfg.get_multireg_register("alert_cause", idx);
@@ -881,11 +876,6 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // Get the clr_shadowed register for the given class
   local function uvm_reg get_class_clr(string class_name);
     return cfg.get_class_reg("clr_shadowed", class_name);
-  endfunction
-
-  // Get the clr_regwen register for the given class
-  local function uvm_reg get_class_clr_regwen(string class_name);
-    return cfg.get_class_reg("clr_regwen", class_name);
   endfunction
 
   // Get the crashdump_trigger_shadowed register for the given class
