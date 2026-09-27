@@ -1,0 +1,25 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:dv:force_class_accum_agent:0.1"
+description: "An agent to drive an interface bound into a class in the alert_handler"
+filesets:
+  files_dv:
+    depend:
+      - lowrisc:dv:dv_base_agent
+    files:
+      - force_class_accum_agent_pkg.sv
+      - force_class_accum_seq_item.svh: {is_include_file: true}
+      - force_class_accum_driver.svh: {is_include_file: true}
+      - force_class_accum_agent_cfg.svh: {is_include_file: true}
+      - force_class_accum_agent.svh: {is_include_file: true}
+      - force_class_accum_seq.svh: {is_include_file: true}
+      - force_class_accum_if.sv
+      - force_class_accum_bound_if.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+      - files_dv
