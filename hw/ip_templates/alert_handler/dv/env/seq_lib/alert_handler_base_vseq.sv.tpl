@@ -2,20 +2,6 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-`define RAND_AND_WR_CLASS_PHASES_CYCLE(i)                                 ${"\\"}
-  `DV_CHECK_RANDOMIZE_WITH_FATAL(ral.class``i``_phase0_cyc_shadowed,      ${"\\"}
-      class``i``_phase0_cyc_shadowed.value inside {[0: max_phase_cyc]};); ${"\\"}
-  `DV_CHECK_RANDOMIZE_WITH_FATAL(ral.class``i``_phase1_cyc_shadowed,      ${"\\"}
-      class``i``_phase1_cyc_shadowed.value inside {[0: max_phase_cyc]};); ${"\\"}
-  `DV_CHECK_RANDOMIZE_WITH_FATAL(ral.class``i``_phase2_cyc_shadowed,      ${"\\"}
-      class``i``_phase2_cyc_shadowed.value inside {[0: max_phase_cyc]};); ${"\\"}
-  `DV_CHECK_RANDOMIZE_WITH_FATAL(ral.class``i``_phase3_cyc_shadowed,      ${"\\"}
-      class``i``_phase3_cyc_shadowed.value inside {[0: max_phase_cyc]};); ${"\\"}
-  csr_update(ral.class``i``_phase0_cyc_shadowed);                         ${"\\"}
-  csr_update(ral.class``i``_phase1_cyc_shadowed);                         ${"\\"}
-  csr_update(ral.class``i``_phase2_cyc_shadowed);                         ${"\\"}
-  csr_update(ral.class``i``_phase3_cyc_shadowed);
-
 `define RAND_WRITE_CLASS_CTRL(i, en_bit, lock_bit) ${"\\"}
   `DV_CHECK_RANDOMIZE_WITH_FATAL(ral.class``i``_ctrl_shadowed, ${"\\"}
                                  en.value == en_bit; lock.value == lock_bit;)  ${"\\"}
@@ -448,11 +434,54 @@ class ${module_instance_name}_base_vseq extends cip_base_vseq #(
     csr_wr(.ptr(ral.classd_crashdump_trigger_shadowed), .value(classd_phase));
   endtask
 
-  virtual task wr_phases_cycle(int max_phase_cyc);
-    `RAND_AND_WR_CLASS_PHASES_CYCLE(a);
-    `RAND_AND_WR_CLASS_PHASES_CYCLE(b);
-    `RAND_AND_WR_CLASS_PHASES_CYCLE(c);
-    `RAND_AND_WR_CLASS_PHASES_CYCLE(d);
+  // Choose a random phase cycle value that is at most max_phase_cyc and write it to the unique
+  // field in register 'class<C>_phase<P>_cyc_shadowed', where C and P are class_idx and phase.
+  local task rand_and_write_one_phase_cycle(int unsigned class_idx,
+                                            int unsigned phase,
+                                            int unsigned max_phase_cyc);
+    uvm_reg_field fields[$];
+    uvm_reg       register = cfg.get_class_phase_cyc(cfg.m_class_names[class_idx], phase);
+
+    register.get_fields(fields);
+    if (fields.size() != 1) begin
+      `uvm_fatal(get_full_name(),
+                 $sformatf("Cannot randomise register %0s: we expect it to have a single field.",
+                           register.get_name()))
+    end
+
+    if (!fields[0].randomize() with { value <= local::max_phase_cyc; }) begin
+      `uvm_fatal(get_full_name(), $sformatf("Failed to randomise the %0s field in %0s",
+                                            fields[0].get_name(), register.get_name()))
+    end
+
+    csr_update(register);
+  endtask
+
+  // Randomise and write the four phase cycle values for the given alert class.
+  local task rand_and_write_phases_cycle_for_class(int unsigned class_idx,
+                                                   int unsigned max_phase_cyc);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < 4; i++) begin
+        automatic int unsigned phase = i;
+        fork
+          rand_and_write_one_phase_cycle(class_idx, phase, max_phase_cyc);
+        join_none
+      end
+      wait fork;
+    end join
+  endtask
+
+  // Randomise and write all the phase cycle counts for all of the alert classes
+  protected task wr_phases_cycle(int max_phase_cyc);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_ALERT_CLASSES; i++) begin
+        automatic int unsigned class_idx = i;
+        fork
+          rand_and_write_phases_cycle_for_class(class_idx, max_phase_cyc);
+        join_none
+      end
+      wait fork;
+    end join
   endtask
 
   virtual task wr_intr_timeout_cycle(bit[TL_DW-1:0] intr_timeout_cyc[NUM_ALERT_CLASSES]);
@@ -509,5 +538,4 @@ class ${module_instance_name}_base_vseq extends cip_base_vseq #(
 
 endclass : ${module_instance_name}_base_vseq
 
-`undef RAND_AND_WR_CLASS_PHASES_CYCLE
 `undef RAND_WRITE_CLASS_CTRL
