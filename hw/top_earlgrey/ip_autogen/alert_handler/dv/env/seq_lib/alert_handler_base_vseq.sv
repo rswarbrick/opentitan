@@ -290,11 +290,14 @@ class alert_handler_base_vseq extends cip_base_vseq #(
     join
   endtask
 
-  // If do_lock_config is set, write value 1 to ping_timer_en register.
-  // If not set, this task has 50% of chance to write value 1 to ping_timer_en register.
-  virtual task lock_config(bit do_lock_config);
+  // Write a value to the ping_timer_en_shadowed register. If do_lock_config is true, this will
+  // write 1 to the register. If it is false, the task has a 50% chance of writing zero (which will
+  // have no effect), and returns immediately otherwise.
+  protected task lock_config(bit do_lock_config);
     if (do_lock_config || $urandom_range(0, 1)) begin
-      csr_wr(.ptr(ral.ping_timer_en_shadowed), .value(do_lock_config));
+      uvm_reg register = ral.get_reg_by_name("ping_timer_en_shadowed");
+      if (register == null) `uvm_fatal(get_full_name(), "Failed to get ping_timer_en_shadowed")
+      csr_wr(register, do_lock_config);
     end
   endtask
 
