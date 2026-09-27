@@ -57,11 +57,12 @@ class ${module_instance_name}_env_cfg extends cip_base_env_cfg #(.RAL_T(${module
   virtual function void initialize(bit inherit_ral_models = 1'b0);
     num_edn = 1;
     super.initialize(inherit_ral_models);
-    shadow_update_err_status_fields[ral.loc_alert_cause[LocalShadowRegUpdateErr].la] = 1;
-    shadow_storage_err_status_fields[ral.loc_alert_cause[LocalShadowRegStorageErr].la] = 1;
 
-    // set num_interrupts & num_alerts
-    num_interrupts = ral.intr_state.get_n_used_bits();
+    shadow_update_err_status_fields[get_la_field(LocalShadowRegUpdateErr)] = 1;
+    shadow_storage_err_status_fields[get_la_field(LocalShadowRegStorageErr)] = 1;
+
+    // Set num_interrupts by counting bits in fields of the intr_state register
+    num_interrupts = get_intr_state_reg().get_n_used_bits();
 
     alert_host_cfg = new[NUM_ALERTS];
     esc_device_cfg = new[NUM_ESCS];
@@ -77,6 +78,43 @@ class ${module_instance_name}_env_cfg extends cip_base_env_cfg #(.RAL_T(${module
 
     // only support 1 outstanding TL items in tlul_adapter
     m_tl_agent_cfg.max_outstanding_req = 1;
+  endfunction
+
+  // Return the intr_state register (looking it up by name) as a dv_base_reg
+  function dv_base_reg get_intr_state_reg();
+    dv_base_reg ret;
+    uvm_reg     intr_state_base = ral.get_reg_by_name("intr_state");
+
+    if (intr_state_base == null) `uvm_fatal("no_reg", "Cannot find intr_state register")
+    if (!$cast(ret, intr_state_base)) begin
+      `uvm_fatal("no_dv_reg", "The intr_state register is not a dv_base_reg.")
+    end
+
+    return ret;
+  endfunction
+
+  // Get the "la" field from the appropriate member of the loc_alert_cause multireg
+  local function dv_base_reg_field get_la_field(local_alert_type_e alert_type);
+    string            reg_name = $sformatf("loc_alert_cause_%0d", alert_type);
+    uvm_reg           register = ral.get_reg_by_name(reg_name);
+    uvm_reg_field     base_fld;
+    dv_base_reg_field fld;
+
+    if (register == null) begin
+      `uvm_fatal("no_reg",
+                 $sformatf("Couldn't find register for %0s at %0s.", alert_type.name(), reg_name))
+    end
+
+    base_fld = register.get_field_by_name("la");
+    if (base_fld == null) begin
+      `uvm_fatal("no_la_field", $sformatf("Couldn't find %0s.la register field.", reg_name))
+    end
+
+    if (!$cast(fld, base_fld)) begin
+      `uvm_fatal("base_la_field", $sformatf("%0s.la is not a dv_base_reg_field.", reg_name))
+    end
+
+    return fld;
   endfunction
 
   // Override shadow register naming checks. The alert handler does not expose any alert signals,
