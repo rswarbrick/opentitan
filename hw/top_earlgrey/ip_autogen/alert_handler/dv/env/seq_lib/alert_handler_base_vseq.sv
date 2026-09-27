@@ -216,29 +216,78 @@ class alert_handler_base_vseq extends cip_base_vseq #(
     end join
   endtask
 
-  virtual task alert_handler_wr_regwen_regs(bit [NUM_ALERT_CLASSES-1:0] regwen = 0,
-                                            bit [NUM_ALERTS-1:0]        alert_regwen = 0,
-                                            bit [NUM_LOCAL_ALERTS-1:0]  loc_alert_regwen = 0,
-                                            bit                         ping_timer_regwen = 0,
-                                            bit [NUM_ALERT_CLASSES-1:0] class_regwen = 0);
+  // Write the class<n>_clr_regwen registers for all the classes, using the values in the regwen
+  // argument.
+  local task write_clr_regwen(bit [NUM_ALERT_CLASSES-1:0] regwen);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_ALERT_CLASSES; i++) begin
+        automatic int unsigned class_idx = i;
+        fork begin
+          csr_wr(cfg.get_class_clr_regwen(cfg.m_class_names[class_idx]), regwen[class_idx]);
+        end join_none
+      end
+      wait fork;
+    end join
+  endtask
 
-    csr_wr(.ptr(ral.classa_clr_regwen), .value(regwen[0]));
-    csr_wr(.ptr(ral.classb_clr_regwen), .value(regwen[1]));
-    csr_wr(.ptr(ral.classc_clr_regwen), .value(regwen[2]));
-    csr_wr(.ptr(ral.classd_clr_regwen), .value(regwen[3]));
+  // Write the alert_regwen_<n> registers to control the write-enable for alerts, using the values
+  // in the regwen argument.
+  local task write_alert_regwen(bit [NUM_ALERTS-1:0] regwen);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_ALERTS; i++) begin
+        automatic int unsigned alert_idx = i;
+        fork begin
+          csr_wr(cfg.get_alert_regwen(alert_idx), regwen[alert_idx]);
+        end join_none
+      end
+      wait fork;
+    end join
+  endtask
 
-    foreach (alert_regwen[i]) csr_wr(.ptr(ral.alert_regwen[i]), .value(alert_regwen[i]));
+  // Write the loc_alert_regwen_<n> registers to control the write-enable for local alerts, using
+  // the values in the regwen argument.
+  local task write_loc_alert_regwen(bit [NUM_LOCAL_ALERTS-1:0] regwen);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_LOCAL_ALERTS; i++) begin
+        automatic int unsigned alert_idx = i;
+        fork begin
+          csr_wr(cfg.get_loc_alert_regwen(alert_idx), regwen[alert_idx]);
+        end join_none
+      end
+      wait fork;
+    end join
+  endtask
 
-    foreach (loc_alert_regwen[i]) begin
-      csr_wr(.ptr(ral.loc_alert_regwen[i]), .value(loc_alert_regwen[i]));
-    end
+  local task write_class_regwen(bit [NUM_ALERT_CLASSES-1:0] regwen);
+    fork : isolation_fork begin
+      for (int unsigned i = 0; i < NUM_ALERT_CLASSES; i++) begin
+        automatic int unsigned class_idx = i;
+        fork begin
+          csr_wr(cfg.get_class_regwen(cfg.m_class_names[class_idx]), regwen[class_idx]);
+        end join_none
+      end
+      wait fork;
+    end join
+  endtask
 
-    csr_wr(.ptr(ral.ping_timer_regwen), .value(ping_timer_regwen));
-
-    csr_wr(.ptr(ral.classa_regwen), .value(class_regwen[0]));
-    csr_wr(.ptr(ral.classb_regwen), .value(class_regwen[1]));
-    csr_wr(.ptr(ral.classc_regwen), .value(class_regwen[2]));
-    csr_wr(.ptr(ral.classd_regwen), .value(class_regwen[3]));
+  protected task alert_handler_wr_regwen_regs(bit [NUM_ALERT_CLASSES-1:0] regwen = 0,
+                                              bit [NUM_ALERTS-1:0]        alert_regwen = 0,
+                                              bit [NUM_LOCAL_ALERTS-1:0]  loc_alert_regwen = 0,
+                                              bit                         ping_timer_regwen = 0,
+                                              bit [NUM_ALERT_CLASSES-1:0] class_regwen = 0);
+    fork
+      write_clr_regwen(regwen);
+      write_alert_regwen(alert_regwen);
+      write_loc_alert_regwen(loc_alert_regwen);
+      begin
+        uvm_reg register = cfg.ral.get_reg_by_name("ping_timer_regwen");
+        if (register == null) begin
+          `uvm_fatal(get_full_name(), "Cannot find ping_timer_regwen register.")
+        end
+        csr_wr(register, ping_timer_regwen);
+      end
+      write_class_regwen(class_regwen);
+    join
   endtask
 
   // If do_lock_config is set, write value 1 to ping_timer_en register.
