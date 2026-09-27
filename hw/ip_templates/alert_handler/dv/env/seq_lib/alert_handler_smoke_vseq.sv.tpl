@@ -8,24 +8,24 @@ class ${module_instance_name}_smoke_vseq extends ${module_instance_name}_base_vs
 
   `uvm_object_new
 
-  rand bit [NUM_ALERT_CLASSES-1:0]                       intr_en;
-  rand bit [NUM_ALERT_CLASSES-1:0]                       clr_regwen;
-  rand bit [NUM_ALERT_CLASSES-1:0]                       class_regwen;
-  rand bit [NUM_ALERT_CLASSES-1:0]                       clr_en;
-  rand bit [NUM_ALERT_CLASSES-1:0]                       lock_bit_en;
-  rand bit [NUM_ALERT_CLASSES-1:0]                       class_en;
-  rand bit [NUM_ALERTS-1:0]                              alert_regwen;
-  rand bit [NUM_ALERTS-1:0]                              alert_trigger;
-  rand bit [NUM_ALERTS-1:0]                              alert_int_err;
-  rand bit [NUM_ALERTS-1:0]                              alert_en;
-  rand bit [NUM_ALERTS-1:0]                              alert_ping_timeout;
-  rand bit [NUM_ALERTS-1:0][NUM_ALERT_CLASSES-1:0]       alert_class_map;
-  rand bit [NUM_LOCAL_ALERTS-1:0]                        local_alert_regwen;
-  rand bit [NUM_LOCAL_ALERTS-1:0]                        local_alert_en;
-  rand bit [NUM_LOCAL_ALERTS-1:0][NUM_ALERT_CLASSES-1:0] local_alert_class_map;
-  rand bit [NUM_ESCS-1:0]                                esc_int_err;
-  rand bit [NUM_ESCS-1:0]                                esc_standalone_int_err;
-  rand bit [NUM_ESCS-1:0]                                esc_ping_timeout;
+  rand bit [NUM_ALERT_CLASSES-1:0]              intr_en;
+  rand bit [NUM_ALERT_CLASSES-1:0]              clr_regwen;
+  rand bit [NUM_ALERT_CLASSES-1:0]              class_regwen;
+  rand bit [NUM_ALERT_CLASSES-1:0]              clr_en;
+  rand bit [NUM_ALERT_CLASSES-1:0]              lock_bit_en;
+  rand bit [NUM_ALERT_CLASSES-1:0]              class_en;
+  rand bit [NUM_ALERTS-1:0]                     alert_regwen;
+  rand bit [NUM_ALERTS-1:0]                     alert_trigger;
+  rand bit [NUM_ALERTS-1:0]                     alert_int_err;
+  rand bit [NUM_ALERTS-1:0]                     alert_en;
+  rand bit [NUM_ALERTS-1:0]                     alert_ping_timeout;
+  rand bit [NUM_ALERTS-1:0][CLASS_DW-1:0]       alert_class_map;
+  rand bit [NUM_LOCAL_ALERTS-1:0]               local_alert_regwen;
+  rand bit [NUM_LOCAL_ALERTS-1:0]               local_alert_en;
+  rand bit [NUM_LOCAL_ALERTS-1:0][CLASS_DW-1:0] local_alert_class_map;
+  rand bit [NUM_ESCS-1:0]                       esc_int_err;
+  rand bit [NUM_ESCS-1:0]                       esc_standalone_int_err;
+  rand bit [NUM_ESCS-1:0]                       esc_ping_timeout;
 
   rand bit ping_timer_regwen;
   rand bit do_clr_esc;
