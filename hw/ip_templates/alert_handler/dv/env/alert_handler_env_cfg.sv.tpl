@@ -254,6 +254,40 @@ class ${module_instance_name}_env_cfg extends cip_base_env_cfg #(.RAL_T(${module
     join
   endtask
 
+  // Get the requested entry from the named (non-compact) multireg.
+  function uvm_reg get_multireg_register(string multireg_name, int unsigned idx);
+    string  reg_name = $sformatf("%0s_%0d", multireg_name, idx);
+    uvm_reg register = ral.get_reg_by_name(reg_name);
+
+    if (register == null) begin
+      `uvm_fatal("bad_multireg_idx",
+                 $sformatf({"Cannot find the register with index %0d ",
+                            "in the multireg '%0s', which would have name '%0s'."},
+                           idx, multireg_name, reg_name))
+    end
+    return register;
+  endfunction
+
+  // Get the requested register from the alert_en_shadowed multireg
+  function uvm_reg get_alert_en_shadowed(int unsigned idx);
+    return get_multireg_register("alert_en_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the loc_alert_en_shadowed multireg
+  function uvm_reg get_loc_alert_en_shadowed(int unsigned idx);
+    return get_multireg_register("loc_alert_en_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the alert_class_shadowed multireg
+  function uvm_reg get_alert_class_shadowed(int unsigned idx);
+    return get_multireg_register("alert_class_shadowed", idx);
+  endfunction
+
+  // Get the requested register from the loc_alert_class_shadowed multireg
+  function uvm_reg get_loc_alert_class_shadowed(int unsigned idx);
+    return get_multireg_register("loc_alert_class_shadowed", idx);
+  endfunction
+
   // Get the a class-specific version of the given register for the requested class.
   function uvm_reg get_class_reg(string reg_name, string class_name);
     string  full_reg_name = $sformatf("class%0s_%0s", class_name, reg_name);
@@ -276,5 +310,12 @@ class ${module_instance_name}_env_cfg extends cip_base_env_cfg #(.RAL_T(${module
   // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
   function uvm_reg get_class_phase_cyc(string class_name, int unsigned phase);
     return get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);
+  endfunction
+
+  // Get the intr_enable register
+  function uvm_reg get_intr_enable();
+    uvm_reg register = ral.get_reg_by_name("intr_enable");
+    if (register == null) `uvm_fatal("no_reg", "Cannot find intr_enable register.")
+    return register;
   endfunction
 endclass
