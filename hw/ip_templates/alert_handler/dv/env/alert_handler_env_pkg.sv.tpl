@@ -32,6 +32,10 @@ package ${module_instance_name}_env_pkg;
   import ping_timer_force_agent_pkg::ping_timer_force_agent_cfg;
   import ping_timer_force_agent_pkg::ping_timer_force_agent;
 
+  import force_class_accum_agent_pkg::force_class_accum_sequencer;
+  import force_class_accum_agent_pkg::force_class_accum_agent_cfg;
+  import force_class_accum_agent_pkg::force_class_accum_agent;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
