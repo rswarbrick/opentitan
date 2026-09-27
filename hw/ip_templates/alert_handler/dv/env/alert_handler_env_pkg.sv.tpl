@@ -36,6 +36,8 @@ package ${module_instance_name}_env_pkg;
   import force_class_accum_agent_pkg::force_class_accum_agent_cfg;
   import force_class_accum_agent_pkg::force_class_accum_agent;
 
+  import ${module_instance_name}_reg_pkg::CLASS_DW;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
