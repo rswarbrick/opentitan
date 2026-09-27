@@ -268,6 +268,16 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
     return register;
   endfunction
 
+  // Get the requested register from the alert_regwen multireg
+  function uvm_reg get_alert_regwen(int unsigned idx);
+    return get_multireg_register("alert_regwen", idx);
+  endfunction
+
+  // Get the requested register from the loc_alert_regwen multireg
+  function uvm_reg get_loc_alert_regwen(int unsigned idx);
+    return get_multireg_register("loc_alert_regwen", idx);
+  endfunction
+
   // Get the requested register from the alert_en_shadowed multireg
   function uvm_reg get_alert_en_shadowed(int unsigned idx);
     return get_multireg_register("alert_en_shadowed", idx);
@@ -305,6 +315,16 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
   // Get the ctrl_shadowed register for the given class
   function uvm_reg get_class_ctrl(string class_name);
     return get_class_reg("ctrl_shadowed", class_name);
+  endfunction
+
+  // Get the regwen register for the given class
+  function uvm_reg get_class_regwen(string class_name);
+    return get_class_reg("regwen", class_name);
+  endfunction
+
+  // Get the clr_regwen register for the given class
+  function uvm_reg get_class_clr_regwen(string class_name);
+    return get_class_reg("clr_regwen", class_name);
   endfunction
 
   // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
