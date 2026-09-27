@@ -35,6 +35,10 @@ class alert_handler_base_vseq extends cip_base_vseq #(
   // A sequencer to use in a sequence that forces an input signal on a ping timer
   protected ping_timer_force_sequencer m_ping_timer_force_sequencer;
 
+  // An array of sequencers (one for each alert class), which can be used in a sequence that wants
+  // to force the accumulation count for an alert class.
+  protected force_class_accum_sequencer m_force_class_accum_sequencers[$];
+
   // various knobs to enable certain routines
   bit do_alert_handler_init = 1'b0;
   bit config_locked         = 1'b0;
@@ -53,6 +57,17 @@ class alert_handler_base_vseq extends cip_base_vseq #(
     m_ping_timer_force_sequencer = sequencer;
   endfunction
 
+  // Provide sequencers for forcing accumulation counts for the various alert classes
+  function void set_force_class_accum_sequencers(force_class_accum_sequencer sequencers[$]);
+    if (sequencers.size != NUM_ALERT_CLASSES) begin
+      `uvm_fatal(get_full_name(),
+                 $sformatf({"Wrong number of sequencers. NUM_ALERT_CLASSES=%0d, ",
+                            "but there are %0d sequencers."},
+                           NUM_ALERT_CLASSES, sequencers.size()))
+    end
+    m_force_class_accum_sequencers = sequencers;
+  endfunction
+
   virtual task pre_start();
     if (m_lpg_sequencer == null) begin
       `uvm_fatal(get_full_name(), "m_lpg_sequencer has not been supplied")
@@ -60,6 +75,10 @@ class alert_handler_base_vseq extends cip_base_vseq #(
     if (m_ping_timer_force_sequencer == null) begin
       `uvm_fatal(get_full_name(), "m_ping_timer_force_sequencer has not been supplied")
     end
+    if (m_force_class_accum_sequencers.size == 0) begin
+      `uvm_fatal(get_full_name(), "No force_class_accum_sequencers supplied.")
+    end
+
     super.pre_start();
   endtask
 
