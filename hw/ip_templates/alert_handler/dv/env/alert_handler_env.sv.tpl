@@ -24,6 +24,10 @@ class ${module_instance_name}_env extends cip_base_env #(
   // An agent that can be used to force signals in an alert_handler_ping_timer inside the device
   ping_timer_force_agent m_ping_timer_force_agent;
 
+  // An array of agents (one per class) that can be used to force counts the alert_handler_accu for
+  // a class.
+  force_class_accum_agent m_force_class_accum_agents[];
+
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
 
@@ -60,6 +64,15 @@ class ${module_instance_name}_env extends cip_base_env #(
     m_ping_timer_force_agent = ping_timer_force_agent::type_id::create("m_ping_timer_force_agent",
                                                                        this);
     m_ping_timer_force_agent.cfg = cfg.m_ping_timer_force_agent_cfg;
+
+    // Build class accum forcing agents
+    m_force_class_accum_agents = new[${module_instance_name}_reg_pkg::N_CLASSES];
+    foreach (m_force_class_accum_agents[i]) begin
+      string agent_name = $sformatf("m_force_class_accum_agents[%0d]", i);
+      m_force_class_accum_agents[i] = force_class_accum_agent::type_id::create(agent_name, this);
+      uvm_config_db#(force_class_accum_agent_cfg)::set(this, agent_name, "cfg",
+                                                       cfg.m_force_class_accum_agent_cfgs[i]);
+    end
 
     // Get vifs
     if (!uvm_config_db#(crashdump_vif)::get(this, "", "crashdump_vif", cfg.crashdump_vif)) begin

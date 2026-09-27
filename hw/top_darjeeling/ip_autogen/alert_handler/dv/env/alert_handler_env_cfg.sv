@@ -3,16 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_block));
-
   esc_en_vif    esc_en_vif;
   crashdump_vif crashdump_vif;
 
   // ext component cfgs
-  rand alert_agent_cfg       alert_host_cfg[];
-  rand esc_agent_cfg         esc_device_cfg[];
-  lpg_agent_cfg              m_lpg_agent_cfg;
-  ping_req_agent_cfg         m_ping_req_agent_cfg;
-  ping_timer_force_agent_cfg m_ping_timer_force_agent_cfg;
+  rand alert_agent_cfg        alert_host_cfg[];
+  rand esc_agent_cfg          esc_device_cfg[];
+  lpg_agent_cfg               m_lpg_agent_cfg;
+  ping_req_agent_cfg          m_ping_req_agent_cfg;
+  ping_timer_force_agent_cfg  m_ping_timer_force_agent_cfg;
+  force_class_accum_agent_cfg m_force_class_accum_agent_cfgs[];
+
+  // The set of names for alert classes
+  string m_class_names[NUM_ALERT_CLASSES] = '{"a", "b", "c", "d"};
 
   // The tracked state of an LPG (with mubi4_t booleans resolved as bits)
   typedef struct {
@@ -74,6 +77,12 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
     foreach (esc_device_cfg[i]) begin
       esc_device_cfg[i] = esc_agent_cfg::type_id::create($sformatf("esc_device_cfg[%0d]", i));
       esc_device_cfg[i].if_mode  = dv_utils_pkg::Device;
+    end
+
+    m_force_class_accum_agent_cfgs = new[alert_handler_reg_pkg::N_CLASSES];
+    foreach (m_force_class_accum_agent_cfgs[i]) begin
+      string name = $sformatf("m_force_class_accum_agent_cfgs[%0d]", i);
+      m_force_class_accum_agent_cfgs[i] = force_class_accum_agent_cfg::type_id::create(name);
     end
 
     // only support 1 outstanding TL items in tlul_adapter
@@ -244,4 +253,18 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
       wait_no_esc_ping_req();
     join
   endtask
+
+  // Get the a class-specific version of the given register for the requested class.
+  function uvm_reg get_class_reg(string reg_name, string class_name);
+    string  full_reg_name = $sformatf("class%0s_%0s", class_name, reg_name);
+    uvm_reg register = ral.get_reg_by_name(full_reg_name);
+
+    if (register == null) begin
+      `uvm_fatal("bad_class_reg",
+                 $sformatf({"Cannot find the class-specific register '%0s' ",
+                            "for the class '%0s', which would have name '%0s'."},
+                           reg_name, class_name, full_reg_name))
+    end
+    return register;
+  endfunction
 endclass
