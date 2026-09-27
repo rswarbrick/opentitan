@@ -13,6 +13,7 @@ filesets:
       - lowrisc:dv:lpg_agent
       - lowrisc:dv:ping_req_agent
       - lowrisc:dv:ping_timer_force_agent
+      - lowrisc:dv:force_class_accum_agent
       - lowrisc:darjeeling_ip:alert_handler_pkg:0.1
       - lowrisc:prim:mubi_pkg
       - lowrisc:darjeeling_constants:top_pkg

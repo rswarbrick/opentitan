@@ -36,7 +36,6 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // count once. So record the alert triggered timing here
   realtime last_triggered_alert_per_class[NUM_ALERT_CLASSES];
 
-  string class_name[] = {"a", "b", "c", "d"};
   bit [TL_DW-1:0] intr_state_val;
 
   bit [NUM_ALERT_CLASSES-1:0] crashdump_triggered = 0;
@@ -59,8 +58,13 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     super.build_phase(phase);
 
     cfg.get_intr_state_reg().get_fields(intr_state_fields);
-    for (int unsigned i = 0; i < class_name.size(); i++) begin
-      assign_class_phase_cyc_regs(i, class_name[i]);
+    for (int unsigned i = 0; i < $size(cfg.m_class_names); i++) begin
+      reg_esc_phase_cycs_per_class_q[i].delete();
+
+      for (int unsigned phase = 0; phase < 4; phase++) begin
+        uvm_reg register = get_class_phase_cyc(cfg.m_class_names[i], phase);
+        reg_esc_phase_cycs_per_class_q[i].push_back(register);
+      end
     end
 
     foreach (alert_fifo[i]) alert_fifo[i] = new($sformatf("alert_fifo[%0d]", i), this);
@@ -68,17 +72,6 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
 
     m_lpg_imp = new("m_lpg_imp", this);
     m_ping_req_imp = new("m_ping_req_imp", this);
-  endfunction
-
-  // Set an entry of reg_esc_phase_cycs_per_class_q to be the four phase registers for the given
-  // class.
-  local function void assign_class_phase_cyc_regs(int unsigned class_idx, string class_name);
-    reg_esc_phase_cycs_per_class_q[class_idx].delete();
-
-    for (int unsigned phase = 0; phase < 4; phase++) begin
-      uvm_reg register = get_class_phase_cyc(class_name, phase);
-      reg_esc_phase_cycs_per_class_q[class_idx].push_back(register);
-    end
   endfunction
 
   task run_phase(uvm_phase phase);
@@ -293,7 +286,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           intr_en = get_intr_enable().get_mirrored_value();
 
           // calculate escalation
-          class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
+          class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
           `uvm_info(`gfn, $sformatf("class %0d is triggered, class ctrl=%0h, under_esc=%0b",
                                     class_i, class_ctrl, under_esc_classes[class_i]), UVM_DEBUG)
           // if class escalation is enabled, add alert to accumulation count
@@ -323,8 +316,9 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // and if current class is not under escalation, then predict escalation
   // note: if more than one alerts triggered on the same clk cycle, only accumulates one
   virtual function void alert_accum_cal(int class_i);
-    bit [TL_DW-1:0] accum_thresh = get_class_accum_thresh(class_name[class_i]).get_mirrored_value();
+    bit [TL_DW-1:0] accum_thresh;
     realtime curr_time = $realtime();
+    accum_thresh = get_class_accum_thresh(cfg.m_class_names[class_i]).get_mirrored_value();
     if (curr_time != last_triggered_alert_per_class[class_i] && !cfg.under_reset) begin
       last_triggered_alert_per_class[class_i] = curr_time;
       // avoid accum_cnt saturate
@@ -344,9 +338,9 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // if clren register is disabled, predict escalation signals by setting the corresponding
   // under_esc_classes bit based on class_ctrl's lock bit
   virtual function void predict_esc(int class_i);
-    bit [TL_DW-1:0] class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
+    bit [TL_DW-1:0] class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
     if (class_ctrl[AlertClassCtrlLock]) begin
-      void'(get_class_clr_regwen(class_name[class_i]).predict(0));
+      void'(get_class_clr_regwen(cfg.m_class_names[class_i]).predict(0));
     end
     under_esc_classes[class_i] = 1;
   endfunction
@@ -370,12 +364,12 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       // reflecting.
       for (class_i = 0; class_i < NUM_ALERT_CLASSES; class_i++) begin
         if (select_class[class_i] == 1) begin
-          phase = get_class_ctrl(class_name[class_i]).get_mirrored_value();
+          phase = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
           break;
         end
       end
       phase = phase[(AlertClassCtrlMapE0 + esc_sig_i * 2) +: 2];
-      exp_cycle = get_class_phase_cyc(class_name[class_i], phase).get_mirrored_value() + 1;
+      exp_cycle = get_class_phase_cyc(cfg.m_class_names[class_i], phase).get_mirrored_value() + 1;
       // Minimal phase length is 2 cycles.
       exp_cycle = exp_cycle < 2 ? 2 : exp_cycle;
       `uvm_info(`gfn, $sformatf("esc_signal_%0d, esc phase %0d, esc class %0d",
@@ -510,7 +504,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
             end
           end else begin
             for (int i = 0; i < NUM_ALERT_CLASSES; i++) begin
-              if (csr.get_name() == $sformatf("class%s_accum_cnt", class_name[i])) begin
+              if (csr.get_name() == $sformatf("class%s_accum_cnt", cfg.m_class_names[i])) begin
                 cov.accum_cnt_cg.sample(i, item.d_data);
               end
             end
@@ -528,11 +522,13 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       end else begin
         // predict in address phase to avoid the register's value changed during the read
         for (int i = 0; i < NUM_ALERT_CLASSES; i++) begin
-          if (csr.get_name() == $sformatf("class%s_esc_cnt", class_name[i])) begin
+          string class_pfx = $sformatf("class%0s", cfg.m_class_names[i]);
+
+          if (csr.get_name() == $sformatf("%0s_esc_cnt", class_pfx)) begin
             void'(csr.predict(.value(intr_cnter_per_class[i]), .kind(UVM_PREDICT_READ)));
-          end else if (csr.get_name() == $sformatf("class%s_accum_cnt", class_name[i])) begin
+          end else if (csr.get_name() == $sformatf("%0s_accum_cnt", class_pfx)) begin
             void'(csr.predict(.value(accum_cnter_per_class[i]), .kind(UVM_PREDICT_READ)));
-          end else if (csr.get_name() == $sformatf("class%s_state", class_name[i])) begin
+          end else if (csr.get_name() == $sformatf("%0s_state", class_pfx)) begin
             void'(csr.predict(.value(state_per_class[i]), .kind(UVM_PREDICT_READ)));
           end
         end
@@ -546,8 +542,9 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   // Since the scoreboard calls this for both writes to the shadowed register, it can return
   // immediately if the register has just become staged.
   local function void on_class_clr_shadowed_write(int unsigned class_idx);
-    uvm_reg     regwen = get_class_clr_regwen(class_name[class_idx]);
-    uvm_reg     csr_base = get_class_clr(class_name[class_idx]);
+    string      class_name = cfg.m_class_names[class_idx];
+    uvm_reg     regwen = get_class_clr_regwen(class_name);
+    uvm_reg     csr_base = get_class_clr(class_name);
     dv_base_reg csr;
 
     if (!$cast(csr, csr_base)) begin
@@ -645,7 +642,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
 
           foreach (crashdump_val.class_esc_state[i]) begin
             uvm_reg_data_t trig_val;
-            trig_val = get_class_crashdump_trigger(class_name[i]).get_mirrored_value();
+            trig_val = get_class_crashdump_trigger(cfg.m_class_names[i]).get_mirrored_value();
             if (crashdump_val.class_esc_state[i] == (trig_val + 3'b100)) begin
               crashdump_triggered[i] = 1;
               if (cfg.en_cov) cov.crashdump_trigger_cg.sample(trig_val);
@@ -698,7 +695,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
                 clr_esc_under_intr[class_i] = 0;
                 // wait a clk for esc signal to go high
                 cfg.clk_rst_vif.wait_n_clks(1);
-                class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
+                class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
                 if (class_ctrl[AlertClassCtrlEn] &&
                     class_ctrl[AlertClassCtrlEnE3:AlertClassCtrlEnE0] > 0) begin
                   intr_cnter_per_class[class_i] = 1;
@@ -746,7 +743,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
                   bit [TL_DW-1:0] class_ctrl;
                   int enabled_sig_q[$];
 
-                  class_ctrl = get_class_ctrl(class_name[class_i]).get_mirrored_value();
+                  class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
                   for (int sig_i = 0; sig_i < NUM_ESC_SIGNALS; sig_i++) begin
                     if (class_ctrl[sig_i*2+7 -: 2] == phase_i && class_ctrl[sig_i+2]) begin
                       enabled_sig_q.push_back(sig_i);
@@ -906,53 +903,39 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     return get_multireg_register("loc_alert_cause", idx);
   endfunction
 
-  // Get the a class-specific register for the given class
-  local function uvm_reg get_class_reg(string reg_name, string class_name);
-    string  full_reg_name = $sformatf("class%0s_%0s", class_name, reg_name);
-    uvm_reg register = cfg.ral.get_reg_by_name(full_reg_name);
-
-    if (register == null) begin
-      `uvm_fatal("bad_class_reg",
-                 $sformatf({"Cannot find the class-specific register '%0s' ",
-                            "for the class '%0s', which would have name '%0s'."},
-                           reg_name, class_name, full_reg_name))
-    end
-    return register;
-  endfunction
-
   // Get the ctrl_shadowed register for the given class
   local function uvm_reg get_class_ctrl(string class_name);
-    return get_class_reg("ctrl_shadowed", class_name);
+    return cfg.get_class_reg("ctrl_shadowed", class_name);
   endfunction
 
   // Get the clr_shadowed register for the given class
   local function uvm_reg get_class_clr(string class_name);
-    return get_class_reg("clr_shadowed", class_name);
+    return cfg.get_class_reg("clr_shadowed", class_name);
   endfunction
 
   // Get the clr_regwen register for the given class
   local function uvm_reg get_class_clr_regwen(string class_name);
-    return get_class_reg("clr_regwen", class_name);
+    return cfg.get_class_reg("clr_regwen", class_name);
   endfunction
 
   // Get the crashdump_trigger_shadowed register for the given class
   local function uvm_reg get_class_crashdump_trigger(string class_name);
-    return get_class_reg("crashdump_trigger_shadowed", class_name);
+    return cfg.get_class_reg("crashdump_trigger_shadowed", class_name);
   endfunction
 
   // Get the accum_thresh register for the given class
   local function uvm_reg get_class_accum_thresh(string class_name);
-    return get_class_reg("accum_thresh_shadowed", class_name);
+    return cfg.get_class_reg("accum_thresh_shadowed", class_name);
   endfunction
 
   // Get the timeout_cyc register for the given class
   local function uvm_reg get_class_timeout_cyc(string class_name);
-    return get_class_reg("timeout_cyc_shadowed", class_name);
+    return cfg.get_class_reg("timeout_cyc_shadowed", class_name);
   endfunction
 
   // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
   local function uvm_reg get_class_phase_cyc(string class_name, int unsigned phase);
-    return get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);
+    return cfg.get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);
   endfunction
 
   // Get the ping_timeout_cyc_shadowed register
