@@ -97,7 +97,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           bit alert_en, loc_alert_en;
           alert_seq_item act_item;
           alert_fifo[index].get(act_item);
-          alert_en = (get_alert_en_shadowed(index).get_mirrored_value() &&
+          alert_en = (cfg.get_alert_en_shadowed(index).get_mirrored_value() &&
                       !cfg.is_lpg_low_power(lpg_index));
 
           // Check that ping mechanism will only ping alerts that have been enabled and locked.
@@ -114,11 +114,11 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
               process_alert_sig(index, 0);
             // alert integrity fail
             end else if (act_item.m_trans_type == AlertIntFail) begin
-              loc_alert_en = get_loc_alert_en_shadowed(LocalAlertIntFail).get_mirrored_value();
+              loc_alert_en = cfg.get_loc_alert_en_shadowed(LocalAlertIntFail).get_mirrored_value();
               if (loc_alert_en) process_alert_sig(index, 1, LocalAlertIntFail);
             end else if (act_item.m_trans_type == AlertPingTrans &&
                          act_item.m_ping_timeout) begin
-              loc_alert_en = get_loc_alert_en_shadowed(LocalAlertPingFail).get_mirrored_value();
+              loc_alert_en = cfg.get_loc_alert_en_shadowed(LocalAlertPingFail).get_mirrored_value();
               if (loc_alert_en) begin
                 process_alert_sig(index, 1, LocalAlertPingFail);
                 `uvm_info(`gfn, $sformatf("alert %0d ping timeout, timeout_cyc reg is %0d",
@@ -145,13 +145,13 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           // escalation integrity fail
           end else if (act_item.m_trans_type == EscIntFail ||
                (act_item.m_esc_handshake_sta == EscIntFail && !act_item.m_ping_timeout)) begin
-            bit loc_alert_en = get_loc_alert_en_shadowed(LocalEscIntFail).get_mirrored_value();
-            if (loc_alert_en) process_alert_sig(index, 1, LocalEscIntFail);
+            uvm_reg loc_alert_en = cfg.get_loc_alert_en_shadowed(LocalEscIntFail);
+            if (loc_alert_en.get_mirrored_value()) process_alert_sig(index, 1, LocalEscIntFail);
           // escalation ping timeout
           end else if (act_item.m_trans_type == EscPingTrans) begin
             if (act_item.m_ping_timeout) begin
-              bit loc_alert_en = get_loc_alert_en_shadowed(LocalEscPingFail).get_mirrored_value();
-              if (loc_alert_en) begin
+              uvm_reg loc_alert_en = cfg.get_loc_alert_en_shadowed(LocalEscPingFail);
+              if (loc_alert_en.get_mirrored_value()) begin
                 process_alert_sig(index, 1, LocalEscPingFail);
                 `uvm_info(`gfn,
                           $sformatf("esc %0d ping timeout, timeout_cyc reg is %0d",
@@ -250,7 +250,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
           bit [TL_DW-1:0] intr_en, class_ctrl;
           bit [NUM_ALERT_CLASS_MSB:0] class_i;
           if (!is_int_err) begin
-            class_i = get_alert_class_shadowed(alert_i).get_mirrored_value();
+            class_i = cfg.get_alert_class_shadowed(alert_i).get_mirrored_value();
             if (!get_alert_cause(alert_i).predict(1)) begin
               `uvm_fatal("prediction_failed",
                          $sformatf("Failed to predict value for %0s.",
@@ -260,7 +260,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
               cov.alert_cause_cg.sample(alert_i, class_i);
             end
           end else begin
-            class_i = get_loc_alert_class_shadowed(local_alert_type).get_mirrored_value();
+            class_i = cfg.get_loc_alert_class_shadowed(local_alert_type).get_mirrored_value();
             if (!get_loc_alert_cause(local_alert_type).predict(1, UVM_PREDICT_READ)) begin
               `uvm_fatal("prediction_failed",
                          $sformatf("Failed to predict value for %0s.",
@@ -283,7 +283,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
 
           intr_state_field = intr_state_fields[class_i];
           void'(intr_state_field.predict(.value(1), .kind(UVM_PREDICT_READ)));
-          intr_en = get_intr_enable().get_mirrored_value();
+          intr_en = cfg.get_intr_enable().get_mirrored_value();
 
           // calculate escalation
           class_ctrl = cfg.get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
@@ -429,7 +429,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
             intr_state_exp = intr_state.get_mirrored_value() | item.a_data;
 
             if (cfg.en_cov) begin
-              bit [TL_DW-1:0] intr_en = get_intr_enable().get_mirrored_value();
+              bit [TL_DW-1:0] intr_en = cfg.get_intr_enable().get_mirrored_value();
               for (int i = 0; i < NUM_ALERT_CLASSES; i++) begin
                 cov.intr_test_cg.sample(i, item.a_data[i], intr_en[i], intr_state_exp[i]);
               end
@@ -506,7 +506,7 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
       if (channel == DataChannel) begin
         if (cfg.en_cov) begin
           if (csr.get_name() == "intr_state") begin
-            bit [TL_DW-1:0] intr_en = get_intr_enable().get_mirrored_value();
+            bit [TL_DW-1:0] intr_en = cfg.get_intr_enable().get_mirrored_value();
             for (int i = 0; i < NUM_ALERT_CLASSES; i++) begin
               cov.intr_cg.sample(i, intr_en[i], item.d_data[i]);
               cov.intr_pins_cg.sample(i, cfg.intr_vif.pins[i]);
@@ -863,53 +863,19 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
     return (!dv_base_reg.is_staged() && !dv_base_reg.get_shadow_update_err());
   endfunction
 
-  // Get the requested entry from the named (non-compact) multireg.
-  local function uvm_reg get_multireg_register(string multireg_name, int unsigned idx);
-    string  reg_name = $sformatf("%0s_%0d", multireg_name, idx);
-    uvm_reg register = cfg.ral.get_reg_by_name(reg_name);
-
-    if (register == null) begin
-      `uvm_fatal("bad_multireg_idx",
-                 $sformatf({"Cannot find the register with index %0d ",
-                            "in the multireg '%0s', which would have name '%0s'."},
-                           idx, multireg_name, reg_name))
-    end
-    return register;
-  endfunction
-
-  // Get the requested register from the alert_en_shadowed multireg
-  local function uvm_reg get_alert_en_shadowed(int unsigned idx);
-    return get_multireg_register("alert_en_shadowed", idx);
-  endfunction
-
-  // Get the requested register from the loc_alert_en_shadowed multireg
-  local function uvm_reg get_loc_alert_en_shadowed(int unsigned idx);
-    return get_multireg_register("loc_alert_en_shadowed", idx);
-  endfunction
-
   // Get the requested register from the alert_regwen multireg
   local function uvm_reg get_alert_regwen(int unsigned idx);
-    return get_multireg_register("alert_regwen", idx);
-  endfunction
-
-  // Get the requested register from the alert_class_shadowed multireg
-  local function uvm_reg get_alert_class_shadowed(int unsigned idx);
-    return get_multireg_register("alert_class_shadowed", idx);
+    return cfg.get_multireg_register("alert_regwen", idx);
   endfunction
 
   // Get the requested register from the alert_cause multireg
   local function uvm_reg get_alert_cause(int unsigned idx);
-    return get_multireg_register("alert_cause", idx);
-  endfunction
-
-  // Get the requested register from the loc_alert_class_shadowed multireg
-  local function uvm_reg get_loc_alert_class_shadowed(int unsigned idx);
-    return get_multireg_register("loc_alert_class_shadowed", idx);
+    return cfg.get_multireg_register("alert_cause", idx);
   endfunction
 
   // Get the requested register from the loc_alert_cause multireg
   local function uvm_reg get_loc_alert_cause(int unsigned idx);
-    return get_multireg_register("loc_alert_cause", idx);
+    return cfg.get_multireg_register("loc_alert_cause", idx);
   endfunction
 
   // Get the clr_shadowed register for the given class
@@ -941,13 +907,6 @@ class ${module_instance_name}_scoreboard extends cip_base_scoreboard #(
   function uvm_reg get_ping_timeout_cyc_shadowed();
     uvm_reg register = cfg.ral.get_reg_by_name("ping_timeout_cyc_shadowed");
     if (register == null) `uvm_fatal("no_reg", "Cannot find ping_timeout_cyc_shadowed register.")
-    return register;
-  endfunction
-
-  // Get the intr_enable register
-  function uvm_reg get_intr_enable();
-    uvm_reg register = cfg.ral.get_reg_by_name("intr_enable");
-    if (register == null) `uvm_fatal("no_reg", "Cannot find intr_enable register.")
     return register;
   endfunction
 
