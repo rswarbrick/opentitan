@@ -268,6 +268,11 @@ class alert_handler_env_cfg extends cip_base_env_cfg #(.RAL_T(alert_handler_reg_
     return register;
   endfunction
 
+  // Get the ctrl_shadowed register for the given class
+  function uvm_reg get_class_ctrl(string class_name);
+    return get_class_reg("ctrl_shadowed", class_name);
+  endfunction
+
   // Get the class<c>_phase<p>_cyc_shadowed register (supplying class and phase)
   function uvm_reg get_class_phase_cyc(string class_name, int unsigned phase);
     return get_class_reg($sformatf("phase%0d_cyc_shadowed", phase), class_name);

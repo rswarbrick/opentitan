@@ -286,7 +286,7 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
           intr_en = get_intr_enable().get_mirrored_value();
 
           // calculate escalation
-          class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
+          class_ctrl = cfg.get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
           `uvm_info(`gfn, $sformatf("class %0d is triggered, class ctrl=%0h, under_esc=%0b",
                                     class_i, class_ctrl, under_esc_classes[class_i]), UVM_DEBUG)
           // if class escalation is enabled, add alert to accumulation count
@@ -338,19 +338,20 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
   // if clren register is disabled, predict escalation signals by setting the corresponding
   // under_esc_classes bit based on class_ctrl's lock bit
   virtual function void predict_esc(int class_i);
-    bit [TL_DW-1:0] class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
+    string class_name = cfg.m_class_names[class_i];
+    bit [TL_DW-1:0] class_ctrl = cfg.get_class_ctrl(class_name).get_mirrored_value();
     if (class_ctrl[AlertClassCtrlLock]) begin
-      void'(get_class_clr_regwen(cfg.m_class_names[class_i]).predict(0));
+      void'(get_class_clr_regwen(class_name).predict(0));
     end
     under_esc_classes[class_i] = 1;
   endfunction
 
   // check if escalation signal's duration length is correct
   virtual function void check_esc_signal(int cycle_cnt, int esc_sig_i);
-    int class_a = get_class_ctrl("a").get_mirrored_value();
-    int class_b = get_class_ctrl("b").get_mirrored_value();
-    int class_c = get_class_ctrl("c").get_mirrored_value();
-    int class_d = get_class_ctrl("d").get_mirrored_value();
+    int class_a = cfg.get_class_ctrl("a").get_mirrored_value();
+    int class_b = cfg.get_class_ctrl("b").get_mirrored_value();
+    int class_c = cfg.get_class_ctrl("c").get_mirrored_value();
+    int class_d = cfg.get_class_ctrl("d").get_mirrored_value();
     int sig_index = AlertClassCtrlEnE0+esc_sig_i;
     bit [NUM_ALERT_CLASSES-1:0] select_class = {class_d[sig_index], class_c[sig_index],
                                                 class_b[sig_index], class_a[sig_index]};
@@ -366,7 +367,7 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
       // reflecting.
       for (class_i = 0; class_i < NUM_ALERT_CLASSES; class_i++) begin
         if (select_class[class_i] == 1) begin
-          phase = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
+          phase = cfg.get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
           break;
         end
       end
@@ -703,7 +704,7 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
                 clr_esc_under_intr[class_i] = 0;
                 // wait a clk for esc signal to go high
                 cfg.clk_rst_vif.wait_n_clks(1);
-                class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
+                class_ctrl = cfg.get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
                 if (class_ctrl[AlertClassCtrlEn] &&
                     class_ctrl[AlertClassCtrlEnE3:AlertClassCtrlEnE0] > 0) begin
                   intr_cnter_per_class[class_i] = 1;
@@ -751,7 +752,7 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
                   bit [TL_DW-1:0] class_ctrl;
                   int enabled_sig_q[$];
 
-                  class_ctrl = get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
+                  class_ctrl = cfg.get_class_ctrl(cfg.m_class_names[class_i]).get_mirrored_value();
                   for (int sig_i = 0; sig_i < NUM_ESC_SIGNALS; sig_i++) begin
                     if (class_ctrl[sig_i*2+7 -: 2] == phase_i && class_ctrl[sig_i+2]) begin
                       enabled_sig_q.push_back(sig_i);
@@ -909,11 +910,6 @@ class alert_handler_scoreboard extends cip_base_scoreboard #(
   // Get the requested register from the loc_alert_cause multireg
   local function uvm_reg get_loc_alert_cause(int unsigned idx);
     return get_multireg_register("loc_alert_cause", idx);
-  endfunction
-
-  // Get the ctrl_shadowed register for the given class
-  local function uvm_reg get_class_ctrl(string class_name);
-    return cfg.get_class_reg("ctrl_shadowed", class_name);
   endfunction
 
   // Get the clr_shadowed register for the given class
