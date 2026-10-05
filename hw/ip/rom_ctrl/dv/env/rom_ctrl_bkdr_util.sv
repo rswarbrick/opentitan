@@ -182,8 +182,10 @@ class rom_ctrl_bkdr_util extends mem_bkdr_util;
   endfunction
 
   virtual function void update_rom_digest();
+    import kmac_pkg::AppDigestW;
+
     bit [7:0] kmac_data_arr[];
-    bit [7:0] dpi_digest[kmac_pkg::AppDigestW / 8];
+    bit [7:0] dpi_digest[AppDigestW / 8];
     int kmac_data_bytes = size_bytes - ROM_DIGEST_BYTES;
     int digest_start_addr = kmac_data_bytes;
     bit scramble_data = 0; // digest and kmac data aren't scrambled
@@ -210,7 +212,7 @@ class rom_ctrl_bkdr_util extends mem_bkdr_util;
       end
     end
     digestpp_dpi_pkg::c_dpi_cshake256(kmac_data_arr, "", "ROM_CTRL", kmac_data_arr.size,
-                                      kmac_pkg::AppDigestW / 8, dpi_digest);
+                                      AppDigestW / 8, dpi_digest);
 
     for (int i = 0; i < ROM_DIGEST_BYTES; i++) begin
       rom_encrypt_write8(digest_start_addr + i, dpi_digest[i], scramble_data);

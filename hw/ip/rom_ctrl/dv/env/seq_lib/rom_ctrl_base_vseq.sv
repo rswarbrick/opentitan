@@ -27,7 +27,7 @@ class rom_ctrl_base_vseq extends cip_base_vseq #(
   extern virtual task rom_ctrl_mem_init();
   extern virtual task do_rand_ops(int num_ops, bit read_only = 0);
   extern virtual task read_digest_regs();
-  extern function void set_kmac_digest(bit [DIGEST_SIZE-1:0] value);
+  extern local function void set_kmac_digest(bit [AppDigestW-1:0] value);
   extern function void configure_kmac_digest(bit as_expected);
   extern task wait_for_fatal_alert(bit check_fsm_state = 1'b1,
                                    int max_delay = 10000,
@@ -129,12 +129,13 @@ endtask
 // Exits early on a system reset.
 task rom_ctrl_base_vseq::read_digest_regs();
   uvm_status_e status;
-  for (int i = 0; i < DIGEST_SIZE / TL_DW; i++) begin
+  int unsigned digest_size_words = cfg.get_digest_size_bits() / TL_DW;
+  for (int i = 0; i < digest_size_words; i++) begin
     ral.digest[i].mirror(.status(status), .check(UVM_CHECK), .prior(100));
     if (!cfg.clk_rst_vif.rst_n) return;
     `DV_CHECK_EQ(status, UVM_IS_OK)
   end
-  for (int i = 0; i < DIGEST_SIZE / TL_DW; i++) begin
+  for (int i = 0; i < digest_size_words; i++) begin
     ral.exp_digest[i].mirror(.status(status), .check(UVM_CHECK), .prior(100));
     if (!cfg.clk_rst_vif.rst_n) return;
     `DV_CHECK_EQ(status, UVM_IS_OK)
@@ -143,11 +144,15 @@ endtask
 
 // Configure the KMAC agent to respond with a digest matching the given value. This is sent in two
 // shares, which are chosen randomly.
-function void rom_ctrl_base_vseq::set_kmac_digest(bit [DIGEST_SIZE-1:0] value);
-  bit [kmac_pkg::AppDigestW-1:0] share0;
+function void rom_ctrl_base_vseq::set_kmac_digest(bit [AppDigestW-1:0] value);
+  bit [AppDigestW-1:0]   share0;
   kmac_pkg::rsp_digest_t rsp_digest_h;
+  int unsigned           digest_size_bits = cfg.get_digest_size_bits();
 
-  `DV_CHECK_STD_RANDOMIZE_FATAL(share0)
+  if (!std::randomize(share0) with { |(share0 >> digest_size_bits) == 1'b0; }) begin
+    `uvm_fatal("failed_rand", "Failed to randomise share0")
+  end
+
   rsp_digest_h.digest_share0 = share0;
   rsp_digest_h.digest_share1 = rsp_digest_h.digest_share0 ^ value;
   cfg.m_kmac_agent_cfg.add_user_digest(rsp_digest_h);
@@ -156,7 +161,7 @@ endfunction
 // Configure the KMAC agent to respond with the ROM's expected digest if correct is as_expected
 // and the wrong digest otherwise.
 function void rom_ctrl_base_vseq::configure_kmac_digest(bit as_expected);
-  bit [DIGEST_SIZE-1:0] digest;
+  bit [AppDigestW-1:0] digest;
 
   // Read the expected digest from the ROM.
   digest = cfg.get_expected_digest();
@@ -166,9 +171,17 @@ function void rom_ctrl_base_vseq::configure_kmac_digest(bit as_expected);
     // then xor with a nonzero value. If single_bit is set, the digest will only be wrong at a
     // single index, which means that most of the words in the digest will match the expected
     // digest (but not all of them).
-    bit [kmac_pkg::AppDigestW-1:0] mask;
-    bit                            single_bit = $urandom_range(0, 1);
-    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(mask, mask != 0; single_bit -> $countones(mask) == 1;)
+    bit [AppDigestW-1:0] mask;
+    int unsigned         digest_size_bits = cfg.get_digest_size_bits();
+    bit                  single_bit = $urandom_range(0, 1);
+
+    if (!std::randomize(mask) with {
+           |(mask >> digest_size_bits) == 1'b0;
+           if (single_bit) { $countones(mask) == 1; }
+         }) begin
+      `uvm_fatal("failed_rand", "Failed to randomise mask")
+    end
+
     digest ^= mask;
   end
 
