@@ -21,7 +21,9 @@ class rom_ctrl_scoreboard extends cip_base_scoreboard #(
   // inside rom_ctrl itself (and this override is not visible to the scoreboard).
   bit [AppDigestW-1:0]   kmac_digest;
 
-  bit                    m_kmac_req_sent;
+  // How many requests have been sent to KMAC since the last reset?
+  int unsigned           m_kmac_reqs_sent;
+
   bit                    rom_check_complete;
 
   // A mubi value that shows whether the digest that came back from KMAC (and is stored in
@@ -46,14 +48,25 @@ class rom_ctrl_scoreboard extends cip_base_scoreboard #(
   extern function void build_phase(uvm_phase phase);
   extern task run_phase(uvm_phase phase);
 
-  // React to a request packet sent to KMAC. One of these is sent when rom_ctrl has finished the
-  // contents of ROM.
+  // React to a request packet sent to KMAC.
   //
-  // Only one such request should be sent per reset (tracked with m_kmac_req_sent). For the request
-  // that is sent, we then check that the data being sent matches the contents of ROM, which we can
-  // read through a memory backdoor. This checks that rom_ctrl has successfully read the contents of
-  // ROM.
+  // rom_ctrl should send exactly two of these requests after a reset. The first is a known-answer
+  // test (KAT). The second is the contents of ROM that have been read.
+  //
+  // Use write_kmac_kat_req() and write_kmac_rom_req(), respectively, for these two requests (and
+  // fail with an error if there is a third).
   extern function void write_kmac_req(kmac_app_req_packet_item packet);
+
+  // React to the bytes in a known-answer test packet sent to KMAC
+  //
+  // This should be sending "OT", padded out to 64 bits.
+  extern local function void write_kmac_kat_req(const ref byte unsigned req_bytes[$]);
+
+  // React to a packet sent to KMAC with the observed contents of ROM.
+  //
+  // Check that the data being sent matches the contents of ROM, which we can read through a memory
+  // backdoor. This checks that rom_ctrl has successfully read the contents of ROM.
+  extern local function void write_kmac_rom_req(const ref byte unsigned req_bytes[$]);
 
   // Follow responses sent from KMAC. There will be one after each reset and it will be a response
   // to a request that was seen in process_kmac_req_fifo.
@@ -108,6 +121,60 @@ endtask
 function void rom_ctrl_scoreboard::write_kmac_req(kmac_app_req_packet_item packet);
   byte unsigned req_bytes[$];
   int unsigned  nonzero_share1_indices[$];
+
+  if (!cfg.en_scb) return;
+
+  // A general check that applies to both KMAC request packets that rom_ctrl should send: there
+  // should not be any words that have a nonzero value in share1. Count how many such words there
+  // are in the packet and report an error if the result is nonzero.
+  if (packet.get_reqs_with_nonzero_share(1, nonzero_share1_indices)) begin
+    `uvm_error(get_full_name(),
+               $sformatf("Packet had %0d requests with a nonzero share1 (indices: %0p).",
+                         nonzero_share1_indices.size(), nonzero_share1_indices))
+  end
+
+  packet.get_share_byte_queue(0, req_bytes);
+
+  // There are supposed to be two KMAC requests after each reset. Call the appropriate checker for
+  // this request, or report an error if it's an extra.
+  case (m_kmac_reqs_sent)
+    0: write_kmac_kat_req(req_bytes);
+    1: write_kmac_rom_req(req_bytes);
+    default: `uvm_error(get_full_name(), "Unexpected extra packet sent to KMAC.")
+  endcase
+
+  m_kmac_reqs_sent++;
+endfunction
+
+function void rom_ctrl_scoreboard::write_kmac_kat_req(const ref byte unsigned req_bytes[$]);
+  // The expected value is "OT" (short for OpenTitan). The backwards ordering is because
+  // SystemVerilog strings are "msb-first".
+  byte exp_kat_test[5] = '{"T", "O", 0, 0, 0};
+  int unsigned num_mismatches;
+
+  if (req_bytes.size() != 5) begin
+    `uvm_error("kat_data_size",
+               $sformatf("First KMAC request packet had %0d bytes. We expect 5.",
+                         req_bytes.size()))
+    return;
+  end
+
+  // The queue should be the known-answer test we expect (which has "OT" in its bottom two bytes,
+  // padded out with zeros).
+  for (int unsigned i = 0; i <= 5; i++) begin
+    if (req_bytes[i] != exp_kat_test[i]) begin
+      `uvm_warning("kat_req_mismatch",
+                   $sformatf("Byte %0d of KAT request is 0x%0h when we expect 0x%0h.",
+                             i, req_bytes[i], exp_kat_test[i]))
+      num_mismatches++;
+    end
+  end
+  if (num_mismatches) begin
+    `uvm_error("kat_req_mismatch", "KAT request didn't have expected value.")
+  end
+endfunction
+
+function void rom_ctrl_scoreboard::write_kmac_rom_req(const ref byte unsigned req_bytes[$]);
   // The length (in words) of the byte queue that matches with a prefix of the ROM.
   int unsigned  matching_pfx_len;
   // The index of the first word in ROM that we expect to match the tail of ROM data (based on the
@@ -116,21 +183,6 @@ function void rom_ctrl_scoreboard::write_kmac_req(kmac_app_req_packet_item packe
 
   // The size of the "hashable" section of ROM is stored in cfg.get_data_size_words().
   int unsigned  num_kmac_msg_words = cfg.get_data_size_words();
-
-  if (!cfg.en_scb) return;
-
-  // Check that we haven't already sent a packet
-  if (m_kmac_req_sent) begin
-    `uvm_error(get_full_name(), "Unexpected extra packet sent to KMAC.")
-  end
-  m_kmac_req_sent = 1;
-
-  packet.get_share_byte_queue(0, req_bytes);
-  if (packet.get_reqs_with_nonzero_share(1, nonzero_share1_indices)) begin
-    `uvm_error(get_full_name(),
-               $sformatf("Packet had %0d requests with a nonzero share1 (indices: %0p).",
-                         nonzero_share1_indices.size(), nonzero_share1_indices))
-  end
 
   // The data that rom_ctrl sent to KMAC should have been a whole number of 38-bit words (padded out
   // to 40 bits), so it should be a multiple of 5.
@@ -251,7 +303,7 @@ function void rom_ctrl_scoreboard::write_kmac_txn(kmac_app_mon_item txn);
   if (!cfg.en_scb) return;
 
   kmac_digest = AppDigestW'(txn.m_rsp.m_digest_s0 ^ txn.m_rsp.m_digest_s1);
-  expected_digest = cfg.get_expected_digest();
+  expected_digest = cfg.get_expected_digest(1);
 
   update_ral_digests(kmac_digest, expected_digest);
   digest_good = prim_mubi_pkg::mubi4_bool_to_mubi(kmac_digest == expected_digest);
@@ -442,7 +494,7 @@ endtask
 function void rom_ctrl_scoreboard::reset(string kind = "HARD");
   super.reset(kind);
   // reset local fifos queues and variables
-  m_kmac_req_sent = 1'b0;
+  m_kmac_reqs_sent = 0;
   rom_check_complete = 1'b0;
   pwrmgr_complete = 1'b0;
   keymgr_complete = 1'b0;

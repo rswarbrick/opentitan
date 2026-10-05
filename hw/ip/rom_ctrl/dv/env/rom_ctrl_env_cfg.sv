@@ -127,8 +127,12 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   // very useful.
   extern function int unsigned get_rom_size_bytes();
 
-  // Read the expected digest from the top m_digest_size_bits bits of ROM (through a backdoor)
-  extern function bit [AppDigestW-1:0] get_expected_digest();
+  // Read the expected digest from the top bits of ROM (through a backdoor)
+  //
+  // If is_data_hash is true, this is the expected digest from the m_digest_size_bits immediately
+  // after the top of the data bits. If not, it is the expected digest from the m_digest_size_bits
+  // at the very top of ROM.
+  extern function bit [AppDigestW-1:0] get_expected_digest(bit is_data_hash);
 
   // Control the device-side delay for the kmac app agent that talks to the dut. If it is large,
   // rom_ctrl will spend all its time waiting for kmac to accept words that rom_ctrl is trying to
@@ -295,14 +299,14 @@ function int unsigned rom_ctrl_env_cfg::get_rom_size_bytes();
   return mem.get_size() * mem.get_n_bits() / 8;
 endfunction
 
-function bit [AppDigestW-1:0] rom_ctrl_env_cfg::get_expected_digest();
+function bit [AppDigestW-1:0] rom_ctrl_env_cfg::get_expected_digest(bit is_data_hash);
   bit [AppDigestW-1:0] digest;
   int unsigned         digest_size_words = get_digest_size_bits() / 32;
 
   // Read the size of ROM in bytes and divide by 4 to get the number of 32-bit words. Then subtract
-  // digest_size_words to get the index of first 32-bit word of the digest. This digest sits in the
-  // top m_digest_size_bits bits of the ROM.
-  int unsigned dig_addr = get_rom_size_bytes() / 4 - digest_size_words;
+  // digest_size_words to get the index of first 32-bit word of the digest: once if this is the KAT
+  // expected digest (at the top of ROM) and twice if this is the expected data hash.
+  int unsigned dig_addr = get_rom_size_bytes() / 4 - ((1 + is_data_hash) * digest_size_words);
 
   // Backdoor read the digest in 32-bit words.
   for (int unsigned i = 0; i < digest_size_words; i++) begin

@@ -67,6 +67,9 @@ module rom_ctrl
   localparam int unsigned RomSizeWords = RomSizeByte >> 2;
   localparam int unsigned RomIndexWidth = vbits(RomSizeWords);
 
+  // The number of words used to represent a digest and the expected digest
+  localparam int unsigned DigestSizeWords = 8;
+
   // SEC_CM: CTRL.MEM.INTEGRITY
   // DataWidth is normally 39, representing 32 bits of actual data plus 7 ECC check bits for the bus
   // end-to-end integrity scheme. If scrambling is disabled("insecure mode"), we store a raw 32-bit
@@ -88,8 +91,7 @@ module rom_ctrl
   logic                     bus_rom_rvalid, bus_rom_rvalid_raw;
 
   logic [RomIndexWidth-1:0] checker_rom_index;
-  logic                     checker_rom_req;
-  logic [DataWidth-1:0]     checker_rom_rdata, checker_rom_rdata_outer;
+  logic [DataWidth-1:0]     checker_rom_rdata, rom_rdata_for_kmac, rom_rdata_for_kmac_outer;
 
   logic                     internal_alert;
 
@@ -98,7 +100,7 @@ module rom_ctrl
   logic [63:0]              kmac_rom_data;
   logic                     kmac_rom_rdy, kmac_rom_rdy_outer;
   logic                     kmac_rom_vld, kmac_rom_vld_outer;
-  logic                     kmac_rom_last, kmac_rom_last_outer;
+  logic                     kmac_rom_last, kmac_rom_last_outer, send_kat_to_kmac;
   logic                     kmac_done;
   logic [255:0]             kmac_digest;
   logic                     kmac_err;
@@ -256,7 +258,6 @@ module rom_ctrl
     .bus_rdata_o       (bus_rom_rdata),
     .bus_rvalid_o      (bus_rom_rvalid_raw),
     .chk_addr_i        (checker_rom_index),
-    .chk_req_i         (checker_rom_req),
     .chk_rdata_o       (checker_rom_rdata),
     .rom_rom_addr_o    (rom_rom_index),
     .rom_prince_addr_o (rom_prince_index),
@@ -266,6 +267,11 @@ module rom_ctrl
     .rom_rvalid_i      (rom_rvalid),
     .alert_o           (mux_alert)
   );
+
+  // The data that should be sent to kmac is normally the ROM word that is being returned by the mux
+  // (and was requested by the checker FSM on the last cycle). To allow known-answer tests, that
+  // checker can set the send_kat_to_kmac flag, in which case we send a different, fixed, message.
+  assign rom_rdata_for_kmac = send_kat_to_kmac ? DataWidth'("OT") : checker_rom_rdata;
 
   // Squash all responses from the ROM to the bus if there's an internal integrity error from the
   // checker FSM or the mux. This avoids having to handle awkward corner cases in the mux: if
@@ -333,7 +339,7 @@ module rom_ctrl
   end : gen_rom_scramble_disabled
 
   // Zero expand checker rdata to pass to KMAC
-  assign kmac_rom_data = {{64-DataWidth{1'b0}}, checker_rom_rdata_outer};
+  assign kmac_rom_data = {{64-DataWidth{1'b0}}, rom_rdata_for_kmac_outer};
 
   // Register block ============================================================
 
@@ -363,11 +369,10 @@ module rom_ctrl
   logic         checker_alert;
 
   if (!SecDisableScrambling) begin : gen_fsm_scramble_enabled
-
     rom_ctrl_fsm #(
       .RomDepth (RomSizeWords),
-      .DataCount (RomSizeWords - 8),
-      .ExpDigestCount (8)
+      .DataCount (RomSizeWords - 2 * DigestSizeWords),
+      .ExpDigestCount (DigestSizeWords)
     ) u_checker_fsm (
       .clk_i,
       .rst_ni,
@@ -383,13 +388,13 @@ module rom_ctrl
       .kmac_rom_rdy_i       (kmac_rom_rdy),
       .kmac_rom_vld_o       (kmac_rom_vld),
       .kmac_rom_last_o      (kmac_rom_last),
+      .send_kat_to_kmac_o   (send_kat_to_kmac),
       .kmac_done_i          (kmac_done),
       .kmac_digest_i        (kmac_digest),
       .kmac_err_i           (kmac_err),
       .rom_select_bus_o     (rom_select_bus),
       .rom_addr_o           (checker_rom_index),
-      .rom_req_o            (checker_rom_req),
-      .rom_data_i           (checker_rom_rdata[31:0]),
+      .rom_data_i           (rom_rdata_for_kmac[31:0]),
       .alert_o              (checker_alert)
     );
 
@@ -415,10 +420,10 @@ module rom_ctrl
         .clr_i    (1'b0),
         .wvalid_i (kmac_rom_vld),
         .wready_o (kmac_rom_rdy),
-        .wdata_i  ({kmac_rom_last, checker_rom_rdata}),
+        .wdata_i  ({kmac_rom_last, rom_rdata_for_kmac}),
         .rvalid_o (kmac_rom_vld_outer),
         .rready_i (kmac_rom_rdy_outer),
-        .rdata_o  ({kmac_rom_last_outer, checker_rom_rdata_outer}),
+        .rdata_o  ({kmac_rom_last_outer, rom_rdata_for_kmac_outer}),
         .full_o   (),
         .depth_o  (),
         .err_o    ()
@@ -427,9 +432,9 @@ module rom_ctrl
       // If there is not a flop on the output, the "_outer" version of a signal is exactly the same
       // as the underlying signal.
 
-      assign kmac_rom_vld_outer      = kmac_rom_vld;
-      assign kmac_rom_last_outer     = kmac_rom_last;
-      assign checker_rom_rdata_outer = checker_rom_rdata;
+      assign kmac_rom_vld_outer       = kmac_rom_vld;
+      assign kmac_rom_last_outer      = kmac_rom_last;
+      assign rom_rdata_for_kmac_outer = rom_rdata_for_kmac;
 
       assign kmac_rom_rdy = kmac_rom_rdy_outer;
     end
@@ -460,7 +465,6 @@ module rom_ctrl
     assign rom_select_bus = MuBi4True;
 
     assign checker_rom_index = '0;
-    assign checker_rom_req = 1'b0;
     assign checker_alert = 1'b0;
 
     logic unused_fsm_inputs;
@@ -474,7 +478,7 @@ module rom_ctrl
 
   // Repack signals to convert between the view expected by rom_ctrl_reg_pkg for CSRs and the view
   // expected by rom_ctrl_fsm. Register 0 of a multi-reg appears as the low bits of the packed data.
-  for (genvar i = 0; i < 8; i++) begin: gen_csr_digest
+  for (genvar i = 0; i < DigestSizeWords; i++) begin: gen_csr_digest
     localparam int unsigned TopBitInt = 32 * i + 31;
     localparam bit [7:0] TopBit = TopBitInt[7:0];
 
