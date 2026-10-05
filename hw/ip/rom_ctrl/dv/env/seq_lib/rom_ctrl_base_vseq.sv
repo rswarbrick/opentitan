@@ -27,7 +27,15 @@ class rom_ctrl_base_vseq extends cip_base_vseq #(
   extern virtual task do_rand_ops(int num_ops, bit read_only = 0);
   extern virtual task read_digest_regs();
   extern local function void set_kmac_digest(bit [AppDigestW-1:0] value);
-  extern function void configure_kmac_digest(bit as_expected);
+
+  // Configure the digests that the KMAC app agent will send, based on the expected digests in the
+  // ROM.
+  //
+  // The first digest will match the value stored as the expected KAT digest. If as_expected is
+  // true, the second digest will match the value stored as the expected data digest. If not, it
+  // will have a different value.
+  extern protected function void configure_kmac_digests(bit as_expected);
+
   extern task wait_for_fatal_alert(bit check_fsm_state = 1'b1,
                                    int max_delay = 10000,
                                    int max_wait_cycle = 1000);
@@ -36,6 +44,9 @@ class rom_ctrl_base_vseq extends cip_base_vseq #(
   //
   // This task will run until the skip has finished, or return early if reset is asserted.
   extern local task skip_middle();
+
+  // Return bits that can be XORed with a digest to change its value
+  extern local function bit [kmac_pkg::AppDigestW-1:0] get_digest_xor_mask();
 endclass : rom_ctrl_base_vseq
 
 function rom_ctrl_base_vseq::new(string name="");
@@ -143,32 +154,15 @@ endfunction
 
 // Configure the KMAC agent to respond with the ROM's expected digest if correct is as_expected
 // and the wrong digest otherwise.
-function void rom_ctrl_base_vseq::configure_kmac_digest(bit as_expected);
-  bit [AppDigestW-1:0] digest;
+function void rom_ctrl_base_vseq::configure_kmac_digests(bit as_expected);
+  bit [AppDigestW-1:0] kat_digest, data_digest;
 
-  // Read the expected digest from the ROM.
-  digest = cfg.get_expected_digest();
+  kat_digest = cfg.get_expected_digest(0);
+  set_kmac_digest(kat_digest);
 
-  if (!as_expected) begin
-    // We want to choose a digest that doesn't match. To do so, start with the expected digest and
-    // then xor with a nonzero value. If single_bit is set, the digest will only be wrong at a
-    // single index, which means that most of the words in the digest will match the expected
-    // digest (but not all of them).
-    bit [AppDigestW-1:0] mask;
-    int unsigned         digest_size_bits = cfg.get_digest_size_bits();
-    bit                  single_bit = $urandom_range(0, 1);
-
-    if (!std::randomize(mask) with {
-           |(mask >> digest_size_bits) == 1'b0;
-           if (single_bit) { $countones(mask) == 1; }
-         }) begin
-      `uvm_fatal("failed_rand", "Failed to randomise mask")
-    end
-
-    digest ^= mask;
-  end
-
-  set_kmac_digest(digest);
+  data_digest = cfg.get_expected_digest(1);
+  if (!as_expected) data_digest ^= get_digest_xor_mask();
+  set_kmac_digest(data_digest);
 endfunction
 
 // Wait for a fatal alert to be raised
@@ -233,3 +227,19 @@ task rom_ctrl_base_vseq::skip_middle();
   seq.start(m_addr_force_sequencer);
   m_skip_middle_running = 0;
 endtask
+
+function bit [kmac_pkg::AppDigestW-1:0] rom_ctrl_base_vseq::get_digest_xor_mask();
+  // If single_bit is set, the mask will only have one bit wrong, which means that most of the words
+  // in the digest will match the expected digest (but not all of them).
+  bit [AppDigestW-1:0] mask;
+  int unsigned         digest_size_bits = cfg.get_digest_size_bits();
+  bit                  single_bit = $urandom_range(0, 1);
+
+  if (!std::randomize(mask) with {
+    |(mask >> digest_size_bits) == 1'b0;
+    if (single_bit) { $countones(mask) == 1; }
+  }) begin
+    `uvm_fatal("failed_rand", "Failed to randomise mask")
+  end
+  return mask;
+endfunction

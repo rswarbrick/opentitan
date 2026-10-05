@@ -18,8 +18,9 @@ endfunction
 task rom_ctrl_smoke_vseq::pre_start();
   bit send_expected = $urandom_range(0, 1);
 
-  // Tell the KMAC app agent whether to generate the digest that was expected in the ROM.
-  configure_kmac_digest(send_expected);
+  // Queue up a pair of digests in the KMAC app agent, which will match those expected in the ROM
+  // if send_expected is true.
+  configure_kmac_digests(send_expected);
 
   super.pre_start();
 endtask
