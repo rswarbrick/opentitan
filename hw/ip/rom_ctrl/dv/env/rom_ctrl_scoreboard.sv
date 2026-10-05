@@ -13,13 +13,13 @@ class rom_ctrl_scoreboard extends cip_base_scoreboard #(
   `uvm_component_utils(rom_ctrl_scoreboard)
 
   // The digest of ROM contents that has been returned from KMAC. This is valid if
-  // rom_check_complete is true. It is sized to be DIGEST_SIZE bits long: this might be shorter than
-  // the interface width from KMAC, but rom_ctrl will only look at the bottom bits.
+  // rom_check_complete is true. rom_ctrl will only look at the bottom cfg.get_digest_size_bits()
+  // bits.
   //
   // Note that this value should not be trusted if cfg.get_force_expected_kmac_rsp() is true. In
   // this situation, the environment might have overridden an internal KMAC response port of the FSM
   // inside rom_ctrl itself (and this override is not visible to the scoreboard).
-  bit [DIGEST_SIZE-1:0]  kmac_digest;
+  bit [AppDigestW-1:0]   kmac_digest;
 
   bit                    m_kmac_req_sent;
   bit                    rom_check_complete;
@@ -65,8 +65,8 @@ class rom_ctrl_scoreboard extends cip_base_scoreboard #(
   extern function void write_kmac_txn(kmac_app_mon_item txn);
 
   // Update the RAL model for the contents of the DIGEST and EXP_DIGEST registers.
-  extern function void update_ral_digests(bit [DIGEST_SIZE-1:0] kmac_digest,
-                                          bit [DIGEST_SIZE-1:0] expected_digest);
+  extern function void update_ral_digests(bit [AppDigestW-1:0] kmac_digest,
+                                          bit [AppDigestW-1:0] expected_digest);
 
   // Monitor values sent to pwrmgr and keymgr.
   //
@@ -118,9 +118,10 @@ function void rom_ctrl_scoreboard::write_kmac_req(kmac_app_req_packet_item packe
   int unsigned  rom_size_words = cfg.get_rom_size_bytes() / 4;
 
   // The top of ROM contains a digest (which is expected to match the SHA3 of the preceding data and
-  // ECC bits). Its size is DIGEST_SIZE (in bits). Subtract that, divided by 32, to get the number
-  // of 32-bit words that should have been read from ROM to generate the message to KMAC.
-  int unsigned  num_kmac_msg_words = rom_size_words - DIGEST_SIZE / 32;
+  // ECC bits). Its size is cfg.get_digest_size_bits() (in bits). Subtract that, divided by 32, to
+  // get the number of 32-bit words that should have been read from ROM to generate the message to
+  // KMAC.
+  int unsigned  num_kmac_msg_words = rom_size_words - cfg.get_digest_size_bits() / 32;
 
   if (!cfg.en_scb) return;
 
@@ -251,11 +252,11 @@ function void rom_ctrl_scoreboard::write_kmac_req(kmac_app_req_packet_item packe
 endfunction
 
 function void rom_ctrl_scoreboard::write_kmac_txn(kmac_app_mon_item txn);
-  bit [DIGEST_SIZE-1:0] expected_digest;
+  bit [AppDigestW-1:0] expected_digest;
 
   if (!cfg.en_scb) return;
 
-  kmac_digest = DIGEST_SIZE'(txn.m_rsp.m_digest_s0 ^ txn.m_rsp.m_digest_s1);
+  kmac_digest = AppDigestW'(txn.m_rsp.m_digest_s0 ^ txn.m_rsp.m_digest_s1);
   expected_digest = cfg.get_expected_digest();
 
   update_ral_digests(kmac_digest, expected_digest);
@@ -264,13 +265,13 @@ function void rom_ctrl_scoreboard::write_kmac_txn(kmac_app_mon_item txn);
   rom_check_complete = 1;
 endfunction
 
-function void rom_ctrl_scoreboard::update_ral_digests(bit [DIGEST_SIZE-1:0] kmac_digest,
-                                                      bit [DIGEST_SIZE-1:0] expected_digest);
+function void rom_ctrl_scoreboard::update_ral_digests(bit [AppDigestW-1:0] kmac_digest,
+                                                      bit [AppDigestW-1:0] expected_digest);
   // The prediction works with kind UVM_PREDICT_READ. This tells the register model that we've just
   // read the given value from the registers. We do this rather than using UVM_PREDICT_DIRECT (the
   // default) because it avoids UVM thinking that there might be a race against CSR operations that
   // are already in flight.
-  for (int i = 0; i < DIGEST_SIZE / TL_DW; i++) begin
+  for (int i = 0; i < cfg.get_digest_size_bits() / TL_DW; i++) begin
     `DV_CHECK(ral.digest[i].predict(.value(kmac_digest[i*TL_DW+:TL_DW]),
                                     .kind(UVM_PREDICT_READ)))
     `DV_CHECK(ral.exp_digest[i].predict(.value(expected_digest[i*TL_DW+:TL_DW]),

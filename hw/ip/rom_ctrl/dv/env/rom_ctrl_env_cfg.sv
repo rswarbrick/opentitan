@@ -22,6 +22,12 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   // ext interfaces
   rom_ctrl_vif rom_ctrl_vif;
 
+  // The number of bits used for a digest. Getter / setter: get_digest_size_bits() /
+  // set_digest_size_bits().
+  //
+  // Configure this before building the environment.
+  local int unsigned m_digest_size_bits;
+
   // For block-level testing, there's a parameterized reg_block class that was added manually to
   // allow the testbench infrastructure to support memories with configurable size. Top-level
   // testing is much easier: there, the top-level has configured the size of the memory for us.
@@ -73,6 +79,14 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   // Retrieve the flag that says whether we should skip reading the middle of ROM.
   extern function bit get_skip_middle();
 
+  // Set the size of the digest that should be read from KMAC.
+  //
+  // This should be called before the environment's build_phase. Stored in m_digest_size_bits.
+  extern function void set_digest_size_bits(int unsigned digest_size_bits);
+
+  // Get the size of the digest that should be read from KMAC.
+  extern function int unsigned get_digest_size_bits();
+
   // Return true if ral_name is the name of the RAL for the ROM itself (rather than the CSRs)
   extern function bit is_rom_ral_name(string ral_name);
 
@@ -90,8 +104,8 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   // Return the size of ROM in bytes
   extern function int unsigned get_rom_size_bytes();
 
-  // Read the expected digest from the top DIGEST_SIZE bits of ROM (through a backdoor)
-  extern function bit [DIGEST_SIZE-1:0] get_expected_digest();
+  // Read the expected digest from the top m_digest_size_bits bits of ROM (through a backdoor)
+  extern function bit [AppDigestW-1:0] get_expected_digest();
 
   // Control the device-side delay for the kmac app agent that talks to the dut. If it is large,
   // rom_ctrl will spend all its time waiting for kmac to accept words that rom_ctrl is trying to
@@ -186,6 +200,27 @@ function bit rom_ctrl_env_cfg::get_skip_middle();
   return m_skip_middle;
 endfunction
 
+function void rom_ctrl_env_cfg::set_digest_size_bits(int unsigned digest_size_bits);
+  if (!digest_size_bits) `uvm_fatal("bad_digest_size", "Cannot set digest_size_bits to zero.")
+  if (digest_size_bits & 31) begin
+    `uvm_fatal("bad_digest_size",
+               $sformatf("Cannot set digest_size_bits = %0d: not a multiple of 32.",
+                         digest_size_bits))
+
+  end
+  if (digest_size_bits > AppDigestW) begin
+    `uvm_fatal("bad_digest_size",
+               $sformatf("Cannot set digest_size_bits = %0d: the maximum supported size is %0d.",
+                         digest_size_bits, AppDigestW))
+  end
+  m_digest_size_bits = digest_size_bits;
+endfunction
+
+function int unsigned rom_ctrl_env_cfg::get_digest_size_bits();
+  if (!m_digest_size_bits) `uvm_fatal("no_digest_size", "No digest size has been set.")
+  return m_digest_size_bits;
+endfunction
+
 function bit rom_ctrl_env_cfg::is_rom_ral_name(string ral_name);
   return (ral_name inside {m_block_level_rom_ral_name, m_chip_level_rom_ral_name});
 endfunction
@@ -227,16 +262,17 @@ function int unsigned rom_ctrl_env_cfg::get_rom_size_bytes();
   return mem.get_size() * mem.get_n_bits() / 8;
 endfunction
 
-function bit [DIGEST_SIZE-1:0] rom_ctrl_env_cfg::get_expected_digest();
-  bit [DIGEST_SIZE-1:0] digest;
+function bit [AppDigestW-1:0] rom_ctrl_env_cfg::get_expected_digest();
+  bit [AppDigestW-1:0] digest;
+  int unsigned         digest_size_words = get_digest_size_bits() / 32;
 
   // Read the size of ROM in bytes and divide by 4 to get the number of 32-bit words. Then subtract
-  // DIGEST_SIZE/32 to get the index of first 32-bit word of the digest. This digest sits in the top
-  // DIGEST_SIZE bits of the ROM.
-  int unsigned dig_addr = get_rom_size_bytes() / 4 - DIGEST_SIZE / 32;
+  // digest_size_words to get the index of first 32-bit word of the digest. This digest sits in the
+  // top m_digest_size_bits bits of the ROM.
+  int unsigned dig_addr = get_rom_size_bytes() / 4 - digest_size_words;
 
   // Backdoor read the digest in 32-bit words.
-  for (int unsigned i = 0; i < DIGEST_SIZE / 32; i++) begin
+  for (int unsigned i = 0; i < digest_size_words; i++) begin
     bit [38:0] raw_word = rom_ctrl_bkdr_util_h.rom_encrypt_read32(4 * (dig_addr + i), 1'b0);
 
     // Ignore the top 7 bits (which contain ECC data) and just accumulate the other 32.

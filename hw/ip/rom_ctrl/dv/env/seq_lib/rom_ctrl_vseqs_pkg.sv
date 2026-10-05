@@ -11,6 +11,7 @@ package rom_ctrl_vseqs_pkg;
   import sec_cm_pkg::*;
 
   import prim_mubi_pkg::*;
+  import kmac_pkg::AppDigestW;
 
   import top_pkg::*;
   import rom_ctrl_env_pkg::*;
