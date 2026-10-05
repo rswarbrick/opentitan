@@ -49,58 +49,62 @@ module rom_ctrl_fsm
   import prim_util_pkg::vbits;
   import rom_ctrl_pkg::*;
 #(
+  // The depth of the physical ROM in words (including KAT bits and expected digest)
   parameter int RomDepth = 16,
-  parameter int TopCount = 8
+  // The size of the data contents (the words to be hashed, which start at the bottom of ROM)
+  parameter int DataCount = 8,
+  // The size of the expected digest stored at the top of ROM
+  parameter int ExpDigestCount = 8
 ) (
-  input logic                        clk_i,
-  input logic                        rst_ni,
+  input logic                              clk_i,
+  input logic                              rst_ni,
 
   // CSR inputs for DIGEST and EXP_DIGEST. To make the indexing look nicer, these are ordered so
   // that DIGEST_0 is the bottom 32 bits (they get reversed while we're shuffling around the wires
   // in rom_ctrl).
-  input logic [TopCount*32-1:0]      digest_i,
-  input logic [TopCount*32-1:0]      exp_digest_i,
+  input logic [ExpDigestCount*32-1:0]      digest_i,
+  input logic [ExpDigestCount*32-1:0]      exp_digest_i,
 
   // CSR outputs for DIGEST and EXP_DIGEST. Ordered with word 0 as LSB.
-  output logic [TopCount*32-1:0]     digest_o,
-  output logic                       digest_vld_o,
-  output logic [31:0]                exp_digest_o,
-  output logic                       exp_digest_vld_o,
-  output logic [vbits(TopCount)-1:0] exp_digest_idx_o,
+  output logic [ExpDigestCount*32-1:0]     digest_o,
+  output logic                             digest_vld_o,
+  output logic [31:0]                      exp_digest_o,
+  output logic                             exp_digest_vld_o,
+  output logic [vbits(ExpDigestCount)-1:0] exp_digest_idx_o,
 
   // To power manager and key manager
-  output pwrmgr_data_t               pwrmgr_data_o,
-  output keymgr_data_t               keymgr_data_o,
+  output pwrmgr_data_t                     pwrmgr_data_o,
+  output keymgr_data_t                     keymgr_data_o,
 
   // To KMAC (ROM data)
-  input logic                        kmac_rom_rdy_i,
-  output logic                       kmac_rom_vld_o,
-  output logic                       kmac_rom_last_o,
+  input logic                              kmac_rom_rdy_i,
+  output logic                             kmac_rom_vld_o,
+  output logic                             kmac_rom_last_o,
 
   // From KMAC (digest data)
-  input logic                        kmac_done_i,
-  input logic [TopCount*32-1:0]      kmac_digest_i,
-  input logic                        kmac_err_i,
+  input logic                              kmac_done_i,
+  input logic [ExpDigestCount*32-1:0]      kmac_digest_i,
+  input logic                              kmac_err_i,
 
   // To ROM mux
-  output mubi4_t                     rom_select_bus_o,
-  output logic [vbits(RomDepth)-1:0] rom_addr_o,
-  output logic                       rom_req_o,
+  output mubi4_t                           rom_select_bus_o,
+  output logic [vbits(RomDepth)-1:0]       rom_addr_o,
+  output logic                             rom_req_o,
 
   // Raw bits from ROM
-  input logic [31:0]                 rom_data_i,
+  input logic [31:0]                       rom_data_i,
 
   // To alert system
-  output logic                       alert_o
+  output logic                             alert_o
 );
 
   import prim_mubi_pkg::mubi4_test_true_loose;
   import prim_mubi_pkg::MuBi4False, prim_mubi_pkg::MuBi4True;
 
   localparam int AW = vbits(RomDepth);
-  localparam int TAW = vbits(TopCount);
+  localparam int TAW = vbits(ExpDigestCount);
 
-  localparam int unsigned TopStartAddrInt = RomDepth - TopCount;
+  localparam int unsigned TopStartAddrInt = RomDepth - ExpDigestCount;
   localparam bit [AW-1:0] TopStartAddr    = TopStartAddrInt[0 +: AW];
 
   // The counter / address generator
@@ -112,7 +116,8 @@ module rom_ctrl_fsm
   logic          counter_lnt;
   rom_ctrl_counter #(
     .RomDepth (RomDepth),
-    .RomTopCount (TopCount)
+    .DataCount (DataCount),
+    .ExpDigestCount (ExpDigestCount)
   ) u_counter (
     .clk_i              (clk_i),
     .rst_ni             (rst_ni),
@@ -129,7 +134,7 @@ module rom_ctrl_fsm
   logic   checker_done, checker_alert;
   mubi4_t checker_good;
   rom_ctrl_compare #(
-    .NumWords  (TopCount)
+    .NumWords  (ExpDigestCount)
   ) u_compare (
     .clk_i        (clk_i),
     .rst_ni       (rst_ni),

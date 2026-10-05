@@ -21,7 +21,7 @@
 
 interface rom_ctrl_fsm_bound_if #(
   parameter bit Bound=0,
-  parameter int TopCount=0
+  parameter int ExpDigestCount=0
 ) (
   input wire clk_i,
   input wire rst_ni
@@ -179,7 +179,7 @@ interface rom_ctrl_fsm_bound_if #(
             begin
               wait(u_checker_fsm.kmac_done_i);
               is_forcing = 1;
-              force u_checker_fsm.kmac_digest_i = (TopCount * 32)'(desired_kmac_digest);
+              force u_checker_fsm.kmac_digest_i = (ExpDigestCount * 32)'(desired_kmac_digest);
               @(posedge clk_i);
             end
           join_any
