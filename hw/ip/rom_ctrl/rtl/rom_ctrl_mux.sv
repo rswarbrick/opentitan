@@ -30,7 +30,6 @@ module rom_ctrl_mux
 
   // Interface for ROM checker
   input logic [AW-1:0]  chk_addr_i,
-  input logic           chk_req_i,
   output logic [DW-1:0] chk_rdata_o,
 
   // Interface for ROM
@@ -119,7 +118,7 @@ module rom_ctrl_mux
 
   assign chk_rdata_o = rom_scr_rdata_i;
 
-  assign rom_req_o         = mubi4_test_true_strict(sel_bus_i) ? bus_req_i         : chk_req_i;
+  assign rom_req_o         = mubi4_test_true_strict(sel_bus_i) ? bus_req_i         : 1;
   assign rom_rom_addr_o    = mubi4_test_true_strict(sel_bus_i) ? bus_rom_addr_i    : chk_addr_i;
   assign rom_prince_addr_o = mubi4_test_true_strict(sel_bus_i) ? bus_prince_addr_i : chk_addr_i;
 

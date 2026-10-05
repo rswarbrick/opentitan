@@ -605,22 +605,21 @@ class Scrambler:
     def flatten(self, mem: MemFile) -> MemFile:
         '''Flatten and pad mem up to the correct size
 
-        This adds 8 trailing zero words as space to store the expected hash.
-        These are (obviously!) not the right hash: we inject them properly
-        later.
-
+        This adds 16 trailing zero words as space for two expected hashes (a
+        known-answer test and the expected hash of the rest of ROM). These are
+        (obviously!) not the right hash: we inject them properly later.
         '''
         digest_size_words = 8
-        initial_len = self.rom_size_words - digest_size_words
+        initial_len = self.rom_size_words - 2 * digest_size_words
 
         flattened = mem.flatten(initial_len)
         assert len(flattened.chunks) == 1
         assert len(flattened.chunks[0].words) == initial_len
 
-        # Add the 8 trailing zero words. We do it here, rather than passing
-        # rom_size_words to mem.flatten, to make sure that we see the error if
-        # mem is too big.
-        flattened.chunks[0].words += [0] * digest_size_words
+        # Add two copies of digest_size_words trailing zero words. We do it
+        # here, rather than passing rom_size_words to mem.flatten, to make sure
+        # that we see the error if mem is too big.
+        flattened.chunks[0].words += [0] * (2 * digest_size_words)
 
         return flattened
 
@@ -760,39 +759,57 @@ class Scrambler:
 
         return MemFile(mem.width, [MemChunk(0, scrambled)])
 
-    def add_hash(self, scr_mem: MemFile) -> None:
-        '''Calculate and insert a cSHAKE256 hash for scr_mem
+    @staticmethod
+    def calc_digest(message: bytes) -> int:
+        '''Calculate a cSHAKE256 hash for message, returning an integer.
 
-        This reads all the scrambled data in logical order, except for the last
-        8 words. It then calculates the resulting cSHAKE hash and finally
-        inserts that hash (unscrambled) in as the top 8 words.
-
+        This uses the customisation string that rom_ctrl uses ('ROM_CTRL').
         '''
-        # We only support flat memories of the correct length
-        assert len(scr_mem.chunks) == 1
-        assert scr_mem.chunks[0].base_addr == 0
-        assert len(scr_mem.chunks[0].words) == self.rom_size_words
-        assert scr_mem.width == 39
+        hash_obj = cSHAKE256.new(data=message, custom=b'ROM_CTRL')
+        digest_bytes = hash_obj.read(256 / 8)
+        return int.from_bytes(digest_bytes, byteorder='little')
 
-        scr_chunk = scr_mem.chunks[0]
+    def extend_with_bad_ecc(self, w32: int, log_addr: int) -> int:
+        '''Extend a 32-bit word to a 39-bit word that unscrambles with bad ECC
 
-        bytes_per_word = 32 // 8
+        w32 is the 32-bit word to be extended and log_addr is the address at
+        which it will be stored.
+
+        This is designed for words that aren't actually supposed to be read
+        unscrambled, so it's reasonable to generate an ECC error if you try to
+        read them.
+        '''
+        mask32 = (1 << 32) - 1
+
+        for chk_bits in range(128):
+            w39 = w32 | (chk_bits << 32)
+            clr39 = self.unscramble_word(39, log_addr, w39)
+            clr32 = clr39 & mask32
+            exp39 = ecc_encode_some(self._secded_config, 'inv_hsiao', 32,
+                                    [clr32])[0][0]
+            if clr39 != exp39:
+                # The checksum doesn't match. Excellent!
+                return w39
+
+        # Surely at least one of the 128 possible choices of top bits
+        # should have given us an invalid checksum.
+        msg = (f"Could not find a 7-bit extension of {w32:#x} that "
+               f"unscrambles at address {log_addr:#x} to give an ECC error")
+        raise RuntimeError(msg)
+
+    def add_exp_digest(self,
+                       msg: bytes,
+                       log_addr0: int,
+                       scr_chunk: MemChunk) -> list[str]:
+        '''Add a some bytes to scr_chunk at offset log_addr0, given bad ECC bits
+
+        Returns a list of strings that represent the bottom 32-bits of those
+        bytes (no ECC bits) as the inside of a C array.
+        '''
         num_digest_words = 256 // 32
 
-        # Read out the scrambled data in logical address order
-        to_hash = b''
-        for log_addr in range(self.rom_size_words - num_digest_words):
-            phy_addr = self.addr_sp_enc(log_addr)
-            scr_word = scr_chunk.words[phy_addr]
-            # Note that a scrambled word with ECC amounts to 39bit. The
-            # expression (39 + 7) // 8 calculates the amount of bytes that are
-            # required to store these bits.
-            to_hash += scr_word.to_bytes((39 + 7) // 8, byteorder='little')
-
-        # Hash it
-        hash_obj = cSHAKE256.new(data=to_hash, custom=b'ROM_CTRL')
-        digest_bytes = hash_obj.read(bytes_per_word * num_digest_words)
-        digest256 = int.from_bytes(digest_bytes, byteorder='little')
+        c_lines: list[str] = []
+        digest256 = Scrambler.calc_digest(msg)
 
         # Chop the 256-bit digest into 32-bit words. These words should never
         # be read "unscrambled": the rom_ctrl checker reads them raw. We can
@@ -800,34 +817,79 @@ class Scrambler:
         # otherwise ignored) to ensure that they unscramble to words with
         # invalid ECC checksums.
         mask32 = (1 << 32) - 1
-        first_digest_idx = self.rom_size_words - num_digest_words
-        # Create a file to store the ROM hash.
-        print('#include <stdint.h>\n', file = self.hash_file)
-        print(f'const uint32_t kRomImageHash[{num_digest_words}] = {{', file = self.hash_file)
+
         for digest_idx in range(num_digest_words):
-            log_addr = first_digest_idx + digest_idx
+            log_addr = log_addr0 + digest_idx
             w32 = (digest256 >> (32 * digest_idx)) & mask32
-            found_mismatch = False
 
-            for chk_bits in range(128):
-                w39 = w32 | (chk_bits << 32)
-                clr39 = self.unscramble_word(39, log_addr, w39)
-                clr32 = clr39 & mask32
-                exp39 = ecc_encode_some(self._secded_config, 'inv_hsiao', 32,
-                                        [clr32])[0][0]
-                if clr39 != exp39:
-                    # The checksum doesn't match. Excellent!
-                    found_mismatch = True
-                    break
-
-            # Surely at least one of the 128 possible choices of top bits
-            # should have given us an invalid checksum.
-            assert found_mismatch
+            w39 = self.extend_with_bad_ecc(w32, log_addr)
 
             phy_addr = self.addr_sp_enc(log_addr)
             scr_chunk.words[phy_addr] = w39
-            print(f'  {w32:#08x},', file = self.hash_file)
+            c_lines.append(f'  {w32:#08x},')
+
+        return c_lines
+
+    def get_single_mem_chunk(self, scr_mem: MemFile) -> MemChunk:
+        '''Get the one and only MemChunk in correctly sized 39-bit MemFile'''
+        # We only support flat memories of the correct length
+        assert len(scr_mem.chunks) == 1
+        assert scr_mem.chunks[0].base_addr == 0
+        assert len(scr_mem.chunks[0].words) == self.rom_size_words
+        assert scr_mem.width == 39
+        return scr_mem.chunks[0]
+
+    def add_data_hash(self, scr_mem: MemFile) -> None:
+        '''Calculate and insert a cSHAKE256 hash for the existing contents of scr_mem
+
+        This reads all the scrambled data in logical order, except for the last
+        2 * 8 words (which will contain the digest we are writing here and then
+        the KAT expected digest). It then calculates the resulting cSHAKE hash
+        and finally inserts that hash (unscrambled) in as the first 8 of the
+        top 16 words.
+        '''
+        scr_chunk = self.get_single_mem_chunk(scr_mem)
+        num_digest_words = 256 // 32
+
+        # Read out the scrambled data in logical address order
+        to_hash = b''
+        for log_addr in range(self.rom_size_words - 2 * num_digest_words):
+            phy_addr = self.addr_sp_enc(log_addr)
+            scr_word = scr_chunk.words[phy_addr]
+            # Note that a scrambled word with ECC amounts to 39bit. The
+            # expression (39 + 7) // 8 calculates the amount of bytes that are
+            # required to store these bits.
+            to_hash += scr_word.to_bytes((39 + 7) // 8, byteorder='little')
+
+        # Create a file to store the ROM hash.
+        print('#include <stdint.h>\n', file = self.hash_file)
+        print(f'const uint32_t kRomImageHash[{num_digest_words}] = {{',
+              file = self.hash_file)
+
+        c_lines = self.add_exp_digest(to_hash,
+                                      self.rom_size_words - 2*num_digest_words,
+                                      scr_chunk)
+        for line in c_lines:
+            print(line, file = self.hash_file)
+
         print('};', file = self.hash_file)
+
+    def add_kat_hash(self, scr_mem: MemFile) -> None:
+        '''Calculate a known-answer test cSHAKE256 hash
+
+        Write the resulting digest to the top of scr_mem
+        '''
+        num_digest_words = 256 // 32
+
+        ascii_o = ord('O')
+        ascii_t = ord('T')
+
+        w39 = (ascii_t << 32) | (ascii_o << 24)
+        to_hash = w39.to_bytes((39 + 7) // 8, byteorder='little')
+
+        self.add_exp_digest(to_hash,
+                            self.rom_size_words - num_digest_words,
+                            self.get_single_mem_chunk(scr_mem))
 
 
 def main() -> int:
@@ -866,8 +928,13 @@ def main() -> int:
     # Scramble the memory
     scr_mem = scrambler.scramble(clr_flat)
 
-    # Insert the expected hash here to the top 8 words
-    scrambler.add_hash(scr_mem)
+    # Write the expected hash of all but the last 16 words to the first 8 words
+    # of the last 16.
+    scrambler.add_data_hash(scr_mem)
+
+    # Finally, write the hash of a tiny 5-byte message ({"T", "O", 0, 0, 0}: a
+    # known answer test) to the last 8 words of the file.
+    scrambler.add_kat_hash(scr_mem)
 
     # Check for collisions
     collisions = scr_mem.collisions()

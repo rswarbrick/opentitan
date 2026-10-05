@@ -41,12 +41,20 @@ module rom_ctrl_compare
   localparam int unsigned LastAddrInt = NumWords - 1;
   localparam bit [AW-1:0] LastAddr    = LastAddrInt[AW-1:0];
 
-  logic          addr_incr;
+  // The address tracked by u_prim_count_addr. This counts up to NumWords
   logic [AW-1:0] addr_q;
+
+  // Increment addr_q at the end of this cycle
+  logic          addr_incr;
+
+  // If true, we have already compared one digest and jumped back to the start. Because we only
+  // allow ourselves to compare two digests, this being true means we will no longer zero addr_q.
+  logic          have_seen_done;
 
   // This module must wait until triggered by a write to start_i. At that point, it cycles through
   // the words of DIGEST and EXP_DIGEST, comparing them to one another and passing each digest word
-  // to the key manager. Finally, it gets to the Done state.
+  // to the key manager. Finally, it gets to the Done state for one cycle before jumping back to
+  // Waiting.
   //
   // States:
   //
@@ -95,10 +103,20 @@ module rom_ctrl_compare
         if (addr_q == LastAddr) state_d = Done;
       end
       Done: begin
-        // Final state
+        if (!have_seen_done) state_d = Waiting;
       end
       default: fsm_alert = 1'b1;
     endcase
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      have_seen_done <= 1'b0;
+    end else begin
+      if (state_q == Done) begin
+        have_seen_done <= 1'b1;
+      end
+    end
   end
 
   // start_i should only be signalled when we're in the Waiting state
@@ -128,11 +146,11 @@ module rom_ctrl_compare
   logic addr_ctr_alert;
   prim_count #(
     .Width(AW),
-    .PossibleActions({prim_count_pkg::Incr})
+    .PossibleActions(prim_count_pkg::Incr | prim_count_pkg::Clr)
   ) u_prim_count_addr (
     .clk_i,
     .rst_ni,
-    .clr_i(1'b0),
+    .clr_i(state_d == Waiting),
     .set_i(1'b0),
     .set_cnt_i('0),
     .incr_en_i(addr_incr),
