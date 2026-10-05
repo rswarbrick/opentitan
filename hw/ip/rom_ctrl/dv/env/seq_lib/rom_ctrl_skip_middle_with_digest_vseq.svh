@@ -28,7 +28,7 @@ class rom_ctrl_skip_middle_with_digest_vseq extends uvm_sequence;
   rand int unsigned m_desired_addr;
 
   // The digest to use when forcing the response from KMAC (not in shares: this is s0 ^ s1)
-  rand bit [kmac_pkg::AppDigestW-1:0] m_digest;
+  rand bit [AppDigestW-1:0] m_digest;
 
   // A flag that causes this virtual sequence to ask all child sequences to abort and then to drop
   // out of the forever loop.
@@ -90,7 +90,7 @@ class rom_ctrl_skip_middle_with_digest_vseq extends uvm_sequence;
   //
   // To ensure that rom_ctrl_override_digest_seq is not running, call this function when the block
   // is in reset.
-  extern function void update_digest(bit [kmac_pkg::AppDigestW-1:0] digest);
+  extern function void update_digest(bit [AppDigestW-1:0] digest);
 
   // Watch m_reset_event and keep m_in_reset up to date.
   extern local task track_resets();
@@ -226,7 +226,7 @@ function void rom_ctrl_skip_middle_with_digest_vseq::abort();
 endfunction
 
 function void
-  rom_ctrl_skip_middle_with_digest_vseq::update_digest(bit [kmac_pkg::AppDigestW-1:0] digest);
+  rom_ctrl_skip_middle_with_digest_vseq::update_digest(bit [AppDigestW-1:0] digest);
 
   if (m_current_digest_seq != null) begin
     `uvm_fatal(get_full_name(), "There is already a digest override sequence running.")

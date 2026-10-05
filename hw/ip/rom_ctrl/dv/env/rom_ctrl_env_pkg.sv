@@ -20,6 +20,8 @@ package rom_ctrl_env_pkg;
   import rom_ctrl_regs_ral_pkg::*;
   import rom_ctrl_prim_ral_pkg::*;
 
+  import kmac_pkg::AppDigestW;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
@@ -38,10 +40,6 @@ package rom_ctrl_env_pkg;
   `ifndef ROM_SIZE_BYTES
     `define ROM_SIZE_BYTES 2**15
   `endif
-
-  // The top bytes in memory hold the digest
-  // KMAC's max digest size is larger than what is required, so declare the size here.
-  parameter uint DIGEST_SIZE    = 256;
 
   // These are the sizes for ROM for the block-level testbench. The environment shouldn't consume
   // them without checking that we are in a block-level context.
