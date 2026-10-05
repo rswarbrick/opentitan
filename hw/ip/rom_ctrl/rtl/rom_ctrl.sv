@@ -366,7 +366,8 @@ module rom_ctrl
 
     rom_ctrl_fsm #(
       .RomDepth (RomSizeWords),
-      .TopCount (8)
+      .DataCount (RomSizeWords - 8),
+      .ExpDigestCount (8)
     ) u_checker_fsm (
       .clk_i,
       .rst_ni,
