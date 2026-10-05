@@ -135,6 +135,8 @@ module tb;
         null, "*.env", "rom_ctrl_compare_vif",
         dut.gen_fsm_scramble_enabled.u_checker_fsm.u_compare.u_bound_if.gen_bound.u_compare_if);
 
+    uvm_config_db#(int unsigned)::set(null, "*", "digest_size_bits", 256);
+
     // Pass a flag that tells the environment that we haven't built rom_ctrl without its integrity
     // check FSM.
     uvm_config_db#(bit)::set(null, "*.env", "integrity_check_disabled", 0);

@@ -519,6 +519,11 @@ module tb;
       u_bound_if (.clk_i, .rst_ni);
 
     initial begin
+      // Pass the size of the digest in bits to the test, which will use it to configure the env_cfg
+      // for the bound-in rom_ctrl environment.
+      uvm_config_db#(int unsigned)::set(null, "*", "digest_size_bits",
+                                        32 * `ROM_CTRL_PATH.DigestSizeWords);
+
       uvm_config_db#(virtual rom_ctrl_fsm_if)::set(null, EnvPath, "rom_ctrl_fsm_vif",
                                                    `FSM_PATH.u_bound_if.gen_bound.u_fsm_if);
 
