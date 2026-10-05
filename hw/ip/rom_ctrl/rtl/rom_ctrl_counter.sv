@@ -5,14 +5,19 @@
 //
 // A counter module that drives the ROM accesses from the checker.
 //
+// The ROM accesses will start by reading the whole data area (from word 0 to word DataCount-1), and
+// the module will then read the expected digest (from word DataCount to word
+// DataCount+ExpDigestCount-1).
+//
 // This module doesn't need state hardening: an attacker that glitches its behaviour can stall the
 // chip or read ROM data in the wrong order. Assuming we've picked a key for the ROM that ensures
 // all words have different values, exploiting a glitch in this module to hide a ROM modification
 // would still need a pre-image attack on SHA-3.
 //
-// RomDepth is the number of words in the ROM. RomTopCount is the number of those words (at the top
-// of the address space) that are considered part of the expected hash (rather than data that should
-// be included in the hash computation).
+// RomDepth is the number of words in the ROM. DataCount is the number of those words (starting at
+// the bottom of the address space) that are data to be hashed. ExpDigestCount is the size of a
+// single (expected) digest in the same unit. Words in the expected digests at the top of ROM are
+// not data that will be included in the hash computation.
 //
 // The counter works through the ROM, starting at address zero. For each address, it will supply
 // that address in read_addr_o and will set read_req_o. This combination makes a request to the ROM.
@@ -33,8 +38,9 @@
 module rom_ctrl_counter
   import prim_util_pkg::vbits;
 #(
-  parameter int RomDepth = 16,
-  parameter int RomTopCount = 2
+  parameter int unsigned RomDepth = 16,
+  parameter int unsigned DataCount = 14,
+  parameter int unsigned ExpDigestCount = 2
 ) (
   input                        clk_i,
   input                        rst_ni,
@@ -50,24 +56,34 @@ module rom_ctrl_counter
   output                       data_last_nontop_o
 );
 
-  // The number of ROM entries that should be hashed. We assume there are at least 2, so that we can
-  // register the data_last_nontop_o signal.
-  localparam int RomNonTopCount = RomDepth - RomTopCount;
+  // The ROM is expected to have expected digests at the top (with a multiple of ExpDigestCount
+  // words) and data at the bottom (with DataCount words). These should all fit in RomDepth words.
+  `ASSERT_INIT(EndsFit_A, ExpDigestCount + DataCount <= RomDepth)
 
-  `ASSERT_INIT(TopCountValid_A, 1 <= RomTopCount && RomTopCount < RomDepth)
-  `ASSERT_INIT(NonTopCountValid_A, 2 <= RomNonTopCount)
+  // There should be at least one word of expected digest
+  `ASSERT_INIT(TopCountValid_A, 1 <= ExpDigestCount)
+
+  // There should be at least two words of data
+  `ASSERT_INIT(DataCountValid_A, 2 <= DataCount)
 
   localparam int AW = vbits(RomDepth);
 
+  // The highest address in the ROM (which will hold the last word of the last expected digest)
   localparam int unsigned TopAddrInt = RomDepth - 1;
-  localparam int unsigned TNTAddrInt = RomNonTopCount - 2;
 
-  localparam bit [AW-1:0] TopAddr = TopAddrInt[0 +: AW];
-  localparam bit [AW-1:0] TNTAddr = TNTAddrInt[0 +: AW];
+  // The address of the penultimate data word in the ROM
+  localparam int unsigned PenultimateDataAddrInt = DataCount - 2;
+
+  // The address of the first word in the first expected digest
+  localparam int unsigned ExpDigestAddrInt = DataCount;
+
+  localparam bit [AW-1:0] TopAddr             = TopAddrInt[0 +: AW];
+  localparam bit [AW-1:0] PenultimateDataAddr = PenultimateDataAddrInt[0 +: AW];
+  localparam bit [AW-1:0] ExpDigestAddr       = ExpDigestAddrInt[0 +: AW];
 
   logic          go;
   logic          req_q, vld_q;
-  logic [AW-1:0] addr_q, addr_d;
+  logic [AW-1:0] addr_q, addr_d, succ_addr;
   logic          done_q, done_d;
   logic          last_nontop_q, last_nontop_d;
 
@@ -105,10 +121,11 @@ module rom_ctrl_counter
     end
   end
 
-  assign go = data_rdy_i & vld_q & ~done_d;
+  assign go        = data_rdy_i & vld_q & ~done_d;
+  assign succ_addr = addr_q + {{AW-1{1'b0}}, 1'b1};
+  assign addr_d    = last_nontop_q ? ExpDigestAddr : succ_addr;
 
-  assign addr_d        = addr_q + {{AW-1{1'b0}}, 1'b1};
-  assign last_nontop_d = addr_q == TNTAddr;
+  assign last_nontop_d = addr_q == PenultimateDataAddr;
 
   assign done_o             = done_q;
   assign read_addr_o        = go ? addr_d : addr_q;
