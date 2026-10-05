@@ -48,7 +48,7 @@ package rom_ctrl_pkg;
   typedef enum logic [11:0] {
     ReadingKAT  = {8'b11011100, prim_mubi_pkg::MuBi4False},
     SendingKAT  = {8'b11110010, prim_mubi_pkg::MuBi4False},
-    WitingKAT   = {8'b00001110, prim_mubi_pkg::MuBi4False},
+    WaitingKAT  = {8'b00001110, prim_mubi_pkg::MuBi4False},
     CheckingKAT = {8'b00010111, prim_mubi_pkg::MuBi4False},
     ReadingLow  = {8'b00101011, prim_mubi_pkg::MuBi4False},
     ReadingHigh = {8'b11001111, prim_mubi_pkg::MuBi4False},
@@ -59,5 +59,16 @@ package rom_ctrl_pkg;
     Invalid     = {8'b01101100, prim_mubi_pkg::MuBi4False}
   } fsm_state_e;
 
-
+  // A selector function with a mubi4 test and two twelve-bit results.
+  //
+  // This is designed so that a single-bit error in sel will cause a single-bit error in the return
+  // value.
+  function automatic bit [11:0] mubi4_sel12(bit [3:0] sel, bit [11:0] if_true, bit [11:0] if_false);
+    bit [3:0] true_val = prim_mubi_pkg::MuBi4True;
+    bit [11:0] ret;
+    for (int unsigned i = 0; i < 12; i++) begin
+      ret[i] = (sel[i / 4] == true_val[i / 4]) ? if_true[i] : if_false[i];
+    end
+    return ret;
+  endfunction
 endpackage

@@ -242,9 +242,9 @@ interface rom_ctrl_fsm_bound_if #(
       forever begin
         wait(force_checker_start);
 
-        force u_checker_fsm.start_checker_q = 1'b1;
+        force u_checker_fsm.start_checker = 1'b1;
         wait_n_clk_or_rst();
-        release u_checker_fsm.start_checker_q;
+        release u_checker_fsm.start_checker;
         checker_start_forced ^= 1;
 
         wait(!force_checker_start);
