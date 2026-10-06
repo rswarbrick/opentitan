@@ -49,8 +49,24 @@ endclass
 
 function void rom_ctrl_env::build_phase(uvm_phase phase);
   bit integrity_check_disabled;
+  int unsigned data_size_bytes, digest_size_bytes, rom_size_bytes;
 
   super.build_phase(phase);
+
+  // Check that the sizes in the env_cfg have been specified with sensible values.
+  data_size_bytes = cfg.get_data_size_words() * 4;
+  digest_size_bytes = cfg.get_digest_size_bits() / 8;
+  rom_size_bytes = cfg.get_rom_size_bytes();
+  if (data_size_bytes + digest_size_bytes > rom_size_bytes) begin
+    `uvm_fatal("rom_partition_sizes",
+               $sformatf({"Invalid ROM partition sizes. ",
+                          "The data partition is %0d bytes and the digest is %0d bytes. ",
+                          "These sum to %0d bytes, but the ROM is only %0d bytes."},
+                         data_size_bytes,
+                         digest_size_bytes,
+                         data_size_bytes + digest_size_bytes,
+                         rom_size_bytes))
+  end
 
   // Get the rom_bkdr interface.
   if (!uvm_config_db#(rom_ctrl_bkdr_util)::get(this, "", "rom_ctrl_bkdr_util",
