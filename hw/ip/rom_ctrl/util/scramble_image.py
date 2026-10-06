@@ -5,17 +5,16 @@
 '''Script for scrambling a ROM image'''
 
 import argparse
-from enum import Enum
 import sys
-from typing import Dict, IO, Optional, Tuple
+from enum import Enum
+from typing import IO
 
-import hjson  # type: ignore
+import hjson
 from Crypto.Hash import cSHAKE256
-
 from mem import MemChunk, MemFile
-from util.design.prince import prince, sbox  # type: ignore
-from util.design.secded_gen import ecc_encode_some  # type: ignore
-from util.design.secded_gen import load_secded_config
+
+from util.design.prince import prince, sbox
+from util.design.secded_gen import ecc_encode_some, load_secded_config
 
 
 class ScramblingMode(Enum):
@@ -24,7 +23,7 @@ class ScramblingMode(Enum):
     SRAM = "sram"
 
 
-_UDict = Dict[object, object]
+_UDict = dict[object, object]
 
 
 class MemoryController:
@@ -71,13 +70,13 @@ class MemoryController:
         self.scrambling_disabled = scrambling_disabled
 
     @staticmethod
-    def _get_params(module: _UDict) -> Dict[str, _UDict]:
+    def _get_params(module: _UDict) -> dict[str, _UDict]:
         params = module.get('param_list')
         assert isinstance(params, list)
         param_decl = module.get('param_decl', {})
         assert isinstance(param_decl, dict)
 
-        named_params = {}  # type: Dict[str, _UDict]
+        named_params: dict[str, _UDict] = {}
         for param in params:
             name = param.get('name')
             assert isinstance(name, str)
@@ -99,7 +98,7 @@ class MemoryController:
         return named_params
 
     @staticmethod
-    def _get_param_cnst(params: Dict[str, _UDict], name: str) -> Tuple[int, int]:
+    def _get_param_cnst(params: dict[str, _UDict], name: str) -> tuple[int, int]:
         param = params.get(name)
         assert isinstance(param, dict)
 
@@ -115,7 +114,7 @@ class MemoryController:
         return val, width
 
     @staticmethod
-    def _get_param_bit(params: Dict[str, _UDict], name: str) -> bool:
+    def _get_param_bit(params: dict[str, _UDict], name: str) -> bool:
         param = params.get(name)
         assert isinstance(param, dict)
 
@@ -154,8 +153,9 @@ class MemoryController:
         return int(base_addr, 16)
 
     @staticmethod
-    def from_hjson_path(top_cfg_path: str, secrets_path: str, mode: str) \
-            -> Optional["MemoryController"]:
+    def from_hjson_path(top_cfg_path: str,
+                        secrets_path: str,
+                        mode: str) -> "MemoryController | None":
         with open(secrets_path, "r", encoding='utf-8') as handle:
             secrets = hjson.load(handle, use_decimal=True)
         with open(top_cfg_path, "r", encoding='utf-8') as handle:
@@ -176,7 +176,7 @@ class MemoryController:
             assert isinstance(entry_name, str)
 
             # Find the corresponding entry in the top cfg.
-            found = False
+            found_entry = None
             for top_entry in top_modules:
                 assert isinstance(top_entry, dict)
                 top_entry_type = top_entry.get('type')
@@ -184,23 +184,29 @@ class MemoryController:
                 top_entry_name = top_entry.get('name')
                 assert isinstance(top_entry_name, str)
                 if top_entry_type == entry_type and top_entry_name == entry_name:
-                    found = True
+                    found_entry = top_entry
                     break
-            assert found, "secrets file contain entry for module '{entry_name}'," + \
-                " but it does not exist in the top configuration"
+
+            if found_entry is None:
+                msg = (f"Secrets file contains an entry for module "
+                       f"'{entry_name}', of type {entry_type}, but it does "
+                       "not exist in the top configuration")
+                raise RuntimeError(msg)
 
             if mode == ScramblingMode.ROM0.value:
                 # Earlgrey has only one ROM, named `rom_ctrl`, while Darjeeling's
                 # first ROM is named `rom_ctrl0`
-                if entry_name in ("rom_ctrl", "rom_ctrl0"):
-                    if entry_type == "rom_ctrl":
-                        return MemoryController(top_entry, entry, entry_name, entry_type, mode)
+                if ((entry_name in ("rom_ctrl", "rom_ctrl0")) and
+                    (entry_type == "rom_ctrl")):
+                    return MemoryController(found_entry, entry, entry_name, entry_type, mode)
             elif mode == ScramblingMode.ROM1.value:
                 if entry_name == "rom_ctrl1" and entry_type == "rom_ctrl":
-                    return MemoryController(top_entry, entry, entry_name, entry_type, mode)
+                    return MemoryController(found_entry, entry, entry_name, entry_type, mode)
             elif mode == ScramblingMode.SRAM.value:
                 if entry_name == "sram_ctrl_main" and entry_type == "sram_ctrl":
-                    return MemoryController(top_entry, entry, entry_name, entry_type, mode)
+                    return MemoryController(found_entry, entry, entry_name, entry_type, mode)
+            else:
+                continue
 
         return None
 
@@ -518,8 +524,7 @@ class Scrambler:
             to_hash += scr_word.to_bytes((39 + 7) // 8, byteorder='little')
 
         # Hash it
-        hash_obj = cSHAKE256.new(data=to_hash,
-                                 custom='ROM_CTRL'.encode('UTF-8'))
+        hash_obj = cSHAKE256.new(data=to_hash, custom=b'ROM_CTRL')
         digest_bytes = hash_obj.read(bytes_per_word * num_digest_words)
         digest256 = int.from_bytes(digest_bytes, byteorder='little')
 
@@ -608,10 +613,9 @@ def main() -> int:
             '       birthday problem. As a work-around, try again after\n'
             '       generating some different RndCnst* parameters.\n',
             file=sys.stderr)
-        print('{} colliding addresses:'.format(len(collisions)),
-              file=sys.stderr)
+        print(f'{len(collisions)} colliding addresses:', file=sys.stderr)
         for addr0, addr1 in collisions:
-            print('  {:#010x}, {:#010x}'.format(addr0, addr1), file=sys.stderr)
+            print(f'  {addr0:#010x}, {addr1:#010x}', file=sys.stderr)
         return 1
 
     scr_mem.write_vmem(args.outfile)

@@ -6,21 +6,21 @@
 import re
 import subprocess
 import tempfile
-from typing import Any, BinaryIO, Dict, IO, List, Optional, TextIO, Tuple
+from typing import IO, Any, BinaryIO, TextIO
 
-from elftools.elf.elffile import ELFFile  # type: ignore
-from util.design.secded_gen import ecc_encode_some, load_secded_config  # type: ignore
+from elftools.elf.elffile import ELFFile
+
+from util.design.secded_gen import ecc_encode_some, load_secded_config
 
 
 class MemChunk:
-    def __init__(self, base_addr: int, words: List[int]):
+    def __init__(self, base_addr: int, words: list[int]):
         '''A contiguous list of words starting at base_addr'''
         self.base_addr = base_addr
         self.words = words
 
     def __str__(self) -> str:
-        return ('MemChunk(@{:#x}, words_len={})'
-                .format(self.base_addr, len(self.words)))
+        return f'MemChunk(@{self.base_addr:#x}, words_len={len(self.words)})'
 
     def next_addr(self) -> int:
         '''Get the address directly above the chunk'''
@@ -47,7 +47,7 @@ class MemChunk:
                 toks.append(f'{word:0{word_chars}X}')
             outfile.write(' '.join(toks) + '\n')
 
-    def add_ecc32(self, config: Dict[str, Any]) -> None:
+    def add_ecc32(self, config: dict[str, Any]) -> None:
         '''Add ECC32 integrity bits
 
         This extends the input words (which are assumed to be 32-bit) by 7
@@ -58,17 +58,16 @@ class MemChunk:
 
 
 class MemFile:
-    def __init__(self, width: int, chunks: List[MemChunk]):
+    def __init__(self, width: int, chunks: list[MemChunk]):
         self.width = width
         self.chunks = chunks
         self.config = load_secded_config()
 
     def __str__(self) -> str:
-        return ('MemFile(width={}, chunks_len={})'
-                .format(self.width, len(self.chunks)))
+        return f'MemFile(width={self.width}, chunks_len={len(self.chunks)})'
 
     @staticmethod
-    def _parse_line(width: int, line: str) -> Tuple[int, List[int]]:
+    def _parse_line(width: int, line: str) -> tuple[int, list[int]]:
         '''Parse a line from a preprocessed vmem file
 
         Returns a pair (addr, words) where addr is the address at the start of
@@ -83,9 +82,9 @@ class MemFile:
 
         addr_match = re.match(r'@([0-9a-fA-F]+)$', tokens[0])
         if addr_match is None:
-            raise ValueError('Bad line format: first token is {!r}, '
-                             'which is not in the right format for an address.'
-                             .format(tokens[0]))
+            msg = (f'Bad line format: first token is {tokens[0]!r}, '
+                   'which is not in the right format for an address.')
+            raise ValueError(msg)
         addr = int(addr_match.group(1), 16)
 
         words = []
@@ -93,14 +92,14 @@ class MemFile:
             try:
                 word = int(word_tok, 16)
             except ValueError:
-                raise ValueError('Word {} of the line is invalid: '
-                                 '{!r} is not a hex number.'
-                                 .format(idx + 1, word_tok)) from None
+                msg = (f'Word {idx + 1} of the line is invalid: '
+                       f'{word_tok!r} is not a hex number.')
+                raise ValueError(msg) from None
 
             if word < 0 or word >> width:
-                raise ValueError('Word {} of the line is {!r}, which '
-                                 'does not fit in an unsigned {}-bit number.'
-                                 .format(idx + 1, word_tok, width))
+                msg = (f'Word {idx + 1} of the line is {word_tok!r}, which '
+                       f'does not fit in an unsigned {width}-bit number.')
+                raise ValueError(msg)
             words.append(word)
 
         return (addr, words)
@@ -109,7 +108,7 @@ class MemFile:
     def _load_preproc(width: int, infile: IO[str]) -> 'MemFile':
         '''Load a pre-processed file'''
         chunks = []
-        next_chunk: Optional[MemChunk] = None
+        next_chunk: MemChunk | None = None
         for line in infile:
             # If the line is empty or whitespace, skip it.
             if not line or line.isspace():
@@ -128,10 +127,10 @@ class MemFile:
             # Glue the line onto the current chunk if there's no gap
             chunk_end = next_chunk.next_addr()
             if line_addr < chunk_end:
-                raise ValueError("Cannot read data starting at {:#x}: "
-                                 "we're already at {:#x}, so this would "
-                                 "go backwards."
-                                 .format(line_addr, chunk_end))
+                msg = (f"Cannot read data starting at {line_addr:#x}: "
+                       f"we're already at {chunk_end:#x}, so this would "
+                       "go backwards.")
+                raise ValueError(msg)
             if line_addr == chunk_end:
                 next_chunk.words += line_words
                 continue
@@ -166,7 +165,7 @@ class MemFile:
     def load_elf32(infile: BinaryIO, base_addr: int) -> 'MemFile':
         '''Read a little-endian 32-bit ELF file'''
         elf_file = ELFFile(infile)
-        segments: List[Tuple[int, int, bytes]] = []
+        segments: list[tuple[int, int, bytes]] = []
         for segment in elf_file.iter_segments():
             seg_type = segment['p_type']
 
@@ -185,10 +184,11 @@ class MemFile:
             # We re-map the addresses relative to base_addr: check that no
             # segment starts before it.
             if seg_lma < 0:
-                raise ValueError('ELF file contains a segment starting at '
-                                 '{:#x}, so cannot be loaded relative to base '
-                                 'address {:#x}.'
-                                 .format(base_addr + seg_lma, base_addr))
+                seg_base = base_addr + seg_lma
+                msg = ('ELF file contains a segment starting at '
+                       f'{seg_base:#x}, so cannot be loaded '
+                       f'relative to base address {base_addr:#x}.')
+                raise ValueError(msg)
 
             segments.append((seg_lma, seg_top, segment.data()))
 
@@ -200,20 +200,21 @@ class MemFile:
         next_addr = 0
         for lma, top, data in segments:
             if lma < next_addr:
-                raise ValueError('ELF file contains overlapping segments with '
-                                 'address ranges {:#x}..{:#x} and '
-                                 '{:#x}..{:#x}.'
-                                 .format(base_addr + prev_lma,
-                                         base_addr + next_addr - 1,
-                                         base_addr + lma,
-                                         base_addr + top))
+                prev_lo = base_addr + prev_lma
+                prev_hi = base_addr + next_addr - 1
+                next_lo = base_addr + lma
+                next_hi = base_addr + top
+                msg = ('ELF file contains overlapping segments with '
+                       f'address ranges {prev_lo:#x}..{prev_hi:#x} and '
+                       f'{next_lo:#x}..{next_hi:#x}.')
+                raise ValueError(msg)
             prev_lma = lma
             next_addr = top + 1
 
         # Merge any adjacent segments, bridging any sub-word gaps. This doesn't
         # do any other right padding: we'll do that on the final pass that
         # converts to 32-bit words.
-        merged_segments: List[Tuple[int, int, bytes]] = []
+        merged_segments: list[tuple[int, int, bytes]] = []
         next_word = 0
         for lma, top, data in segments:
             # Round the LMA down to the previous word boundary. The non-overlap
@@ -248,10 +249,11 @@ class MemFile:
         # Assemble the bytes in each segment into little-endian 32-bit words.
         # Zero-extend any partial word at the end of a segment. Because of the
         # merging in the previous pass, we know this won't cause any overlaps.
-        chunks: List[MemChunk] = []
+        chunks: list[MemChunk] = []
         for lma_word, _, data in merged_segments:
             words = []
             word = 0
+            idx = 0
             for idx, byte in enumerate(data):
                 shift = 8 * (idx % 4)
                 word |= byte << shift
