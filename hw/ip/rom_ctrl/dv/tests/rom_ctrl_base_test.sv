@@ -26,13 +26,17 @@ function rom_ctrl_base_test::new (string name, uvm_component parent);
 endfunction
 
 function void rom_ctrl_base_test::initialize_env_cfg();
-  int unsigned digest_size_bits;
+  int unsigned digest_size_bits, data_size_words;
   bit          skip_middle;
 
+  if (!uvm_config_db#(int unsigned)::get(this, "", "data_size_words", data_size_words)) begin
+    `uvm_fatal("config_db", "Failed to get data_size_words from uvm_config_db")
+  end
   if (!uvm_config_db#(int unsigned)::get(this, "", "digest_size_bits", digest_size_bits)) begin
     `uvm_fatal("config_db", "Failed to get digest_size_bits from uvm_config_db")
   end
 
+  cfg.set_data_size_words(data_size_words);
   cfg.set_digest_size_bits(digest_size_bits);
 
   super.initialize_env_cfg();

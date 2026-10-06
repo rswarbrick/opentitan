@@ -519,8 +519,9 @@ module tb;
       u_bound_if (.clk_i, .rst_ni);
 
     initial begin
-      // Pass the size of the digest in bits to the test, which will use it to configure the env_cfg
-      // for the bound-in rom_ctrl environment.
+      // Pass the size of the hashed data in words and the size of the digest in bits to the test,
+      // which will use the two to configure the env_cfg for the bound-in rom_ctrl environment.
+      uvm_config_db#(int unsigned)::set(null, "*", "data_size_words", `FSM_PATH.DataCount);
       uvm_config_db#(int unsigned)::set(null, "*", "digest_size_bits",
                                         32 * `ROM_CTRL_PATH.DigestSizeWords);
 

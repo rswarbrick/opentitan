@@ -114,14 +114,8 @@ function void rom_ctrl_scoreboard::write_kmac_req(kmac_app_req_packet_item packe
   // number of observed KMAC requests and the size of ROM)
   int unsigned  start_tail_idx;
 
-  // Read the size of ROM in bytes and divide by 4 to get the number of 32-bit words.
-  int unsigned  rom_size_words = cfg.get_rom_size_bytes() / 4;
-
-  // The top of ROM contains a digest (which is expected to match the SHA3 of the preceding data and
-  // ECC bits). Its size is cfg.get_digest_size_bits() (in bits). Subtract that, divided by 32, to
-  // get the number of 32-bit words that should have been read from ROM to generate the message to
-  // KMAC.
-  int unsigned  num_kmac_msg_words = rom_size_words - cfg.get_digest_size_bits() / 32;
+  // The size of the "hashable" section of ROM is stored in cfg.get_data_size_words().
+  int unsigned  num_kmac_msg_words = cfg.get_data_size_words();
 
   if (!cfg.en_scb) return;
 
