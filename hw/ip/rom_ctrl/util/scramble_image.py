@@ -6,8 +6,9 @@
 
 import argparse
 import sys
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import IO
+from typing import IO, ClassVar
 
 import hjson
 from Crypto.Hash import cSHAKE256
@@ -295,33 +296,50 @@ def subst_perm_dec(data: int, key: int, width: int, num_rounds: int) -> int:
 
     return data ^ key
 
-
+@dataclass
 class Scrambler:
-    subst_perm_rounds = 2
-    num_rounds_half = 3
+    subst_perm_rounds: ClassVar[int] = 2
+    num_rounds_half: ClassVar[int] = 3
 
-    def __init__(self, disable: bool, nonce: int, nonce_width: int,
-                 key: int, key_width: int,
-                 rom_base: int, rom_size_words: int,
-                 hash_file: IO[str]):
-        assert nonce_width > 0
-        assert key_width > 0
-        assert 0 <= nonce < (1 << nonce_width)
-        assert 0 <= key < (1 << key_width)
-        assert 0 < rom_size_words < (1 << 64)
+    disable: bool
+    """If true then scrambling is disabled."""
 
-        self.disable = disable
-        self.nonce = nonce
-        self.nonce_width = nonce_width
-        self.key = key
-        self.key_width = key_width
-        self.rom_size_words = rom_size_words
-        self.rom_base = rom_base
+    nonce: int
+    """The nonce used when generating the keystream."""
 
-        self.config = load_secded_config()
-        self.hash_file = hash_file
+    nonce_width: int
+    """The width of the nonce in bits."""
 
-        self._addr_width = (rom_size_words - 1).bit_length()
+    key: int
+    """The key used for the PRINCE keystream."""
+
+    key_width: int
+    """The width of the key in bits."""
+
+    rom_base: int
+    """The byte address of the base of ROM"""
+
+    rom_size_words: int
+    """The number of 32-bit words in the ROM"""
+
+    hash_file: IO[str]
+    """A file stream to which the hash should be written as a C constant."""
+
+    _addr_width: int = field(init=False)
+    """The bit-width of addresses"""
+
+    _secded_config: dict[str, object] = field(init=False)
+    """A dictionary representation of SECDED configuration (for secded_gen)"""
+
+    def __post_init__(self):
+        assert self.nonce_width > 0
+        assert self.key_width > 0
+        assert 0 <= self.nonce < (1 << self.nonce_width)
+        assert 0 <= self.key < (1 << self.key_width)
+        assert 0 < self.rom_size_words < (1 << 64)
+
+        self._addr_width = (self.rom_size_words - 1).bit_length()
+        self._secded_config = load_secded_config()
 
     def is_disabled(self) -> bool:
         return self.disable
@@ -547,7 +565,7 @@ class Scrambler:
                 w39 = w32 | (chk_bits << 32)
                 clr39 = self.unscramble_word(39, log_addr, w39)
                 clr32 = clr39 & mask32
-                exp39 = ecc_encode_some(self.config, 'inv_hsiao', 32,
+                exp39 = ecc_encode_some(self._secded_config, 'inv_hsiao', 32,
                                         [clr32])[0][0]
                 if clr39 != exp39:
                     # The checksum doesn't match. Excellent!
