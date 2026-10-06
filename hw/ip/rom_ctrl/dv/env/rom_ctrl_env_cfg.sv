@@ -22,6 +22,16 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   // ext interfaces
   rom_ctrl_vif rom_ctrl_vif;
 
+  // The number of ROM words that should be sent to KMAC for hashing.
+  //
+  // This is less than the size of the entire ROM (which can be seen, measured in bytes, with
+  // get_rom_size_bytes()) because the ROM also contains KAT information and an expected digest.
+  //
+  // Getter / setter: get_data_size_words() / set_data_size_words().
+  //
+  // Configure this before building the environment.
+  local int unsigned m_data_size_words;
+
   // The number of bits used for a digest. Getter / setter: get_digest_size_bits() /
   // set_digest_size_bits().
   //
@@ -79,6 +89,14 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   // Retrieve the flag that says whether we should skip reading the middle of ROM.
   extern function bit get_skip_middle();
 
+  // Set the size of the data section of ROM (the contents sent to be hashed) in words.
+  //
+  // This should be called before the environment's build_phase. Stored in m_data_size_words.
+  extern function void set_data_size_words(int unsigned data_size_words);
+
+  // Get the size of the hashed part of ROM.
+  extern function int unsigned get_data_size_words();
+
   // Set the size of the digest that should be read from KMAC.
   //
   // This should be called before the environment's build_phase. Stored in m_digest_size_bits.
@@ -102,6 +120,11 @@ class rom_ctrl_env_cfg extends cip_base_env_cfg #(.RAL_T(rom_ctrl_regs_reg_block
   extern function bit get_force_expected_kmac_rsp();
 
   // Return the size of ROM in bytes
+  //
+  // Note that this is the size of the entire ROM (not just the hashable data section): the TL
+  // window also provides access to the words containing a KAT and the expected digest. Since these
+  // are actually used without unscrambling, the values visible through the TL window will not be
+  // very useful.
   extern function int unsigned get_rom_size_bytes();
 
   // Read the expected digest from the top m_digest_size_bits bits of ROM (through a backdoor)
@@ -198,6 +221,16 @@ endfunction
 
 function bit rom_ctrl_env_cfg::get_skip_middle();
   return m_skip_middle;
+endfunction
+
+function void rom_ctrl_env_cfg::set_data_size_words(int unsigned data_size_words);
+  if (!data_size_words) `uvm_fatal("bad_data_size", "Cannot set data_size_words to zero.")
+  m_data_size_words = data_size_words;
+endfunction
+
+function int unsigned rom_ctrl_env_cfg::get_data_size_words();
+  if (!m_data_size_words) `uvm_fatal("no_data_size", "No data size has been set.")
+  return m_data_size_words;
 endfunction
 
 function void rom_ctrl_env_cfg::set_digest_size_bits(int unsigned digest_size_bits);
