@@ -21,37 +21,42 @@ package rom_ctrl_pkg;
     logic         valid;
   } keymgr_data_t;
 
-  //
-  // Encoding generated with:
-  // $ ./util/design/sparse-fsm-encode.py -d 3 -m 7 -n 6 -s 2 --language=sv
+  // Encoding generated using Python 3.12.13 with:
+  // $ util/design/sparse-fsm-encode.py --language=sv --seed 2 --distance 3 --states 11 --bits 8
   //
   // Hamming distance histogram:
   //
   //  0: --
   //  1: --
   //  2: --
-  //  3: |||||||||||||||||||| (57.14%)
-  //  4: ||||||||||||||| (42.86%)
-  //  5: --
-  //  6: --
+  //  3: |||||||||||||||| (29.09%)
+  //  4: |||||||||||||||||||| (34.55%)
+  //  5: ||||||||||| (20.00%)
+  //  6: |||||| (10.91%)
+  //  7: ||| (5.45%)
+  //  8: --
   //
   // Minimum Hamming distance: 3
-  // Maximum Hamming distance: 4
+  // Maximum Hamming distance: 7
   // Minimum Hamming weight: 1
-  // Maximum Hamming weight: 4
+  // Maximum Hamming weight: 6
   //
-  // However, we glom on an extra 4 bits to hold a mubi4_t that encodes "state == Done". The idea is
+  // However, we add on an extra 4 bits to hold a mubi4_t that encodes "state == Done". The idea is
   // that we can use them for the rom_select_bus_o signal without needing an intermediate 1-bit
   // signal which would need burying.
 
-  typedef enum logic [9:0] {
-    ReadingLow  = {6'b001100, prim_mubi_pkg::MuBi4False},
-    ReadingHigh = {6'b001011, prim_mubi_pkg::MuBi4False},
-    RomAhead    = {6'b111001, prim_mubi_pkg::MuBi4False},
-    KmacAhead   = {6'b100111, prim_mubi_pkg::MuBi4False},
-    Checking    = {6'b010101, prim_mubi_pkg::MuBi4False},
-    Done        = {6'b100000, prim_mubi_pkg::MuBi4True},
-    Invalid     = {6'b010010, prim_mubi_pkg::MuBi4False}
+  typedef enum logic [11:0] {
+    ReadingKAT  = {8'b11011100, prim_mubi_pkg::MuBi4False},
+    SendingKAT  = {8'b11110010, prim_mubi_pkg::MuBi4False},
+    WitingKAT   = {8'b00001110, prim_mubi_pkg::MuBi4False},
+    CheckingKAT = {8'b00010111, prim_mubi_pkg::MuBi4False},
+    ReadingLow  = {8'b00101011, prim_mubi_pkg::MuBi4False},
+    ReadingHigh = {8'b11001111, prim_mubi_pkg::MuBi4False},
+    RomAhead    = {8'b01000000, prim_mubi_pkg::MuBi4False},
+    KmacAhead   = {8'b10011011, prim_mubi_pkg::MuBi4False},
+    Checking    = {8'b10000010, prim_mubi_pkg::MuBi4False},
+    Done        = {8'b01110001, prim_mubi_pkg::MuBi4True},
+    Invalid     = {8'b01101100, prim_mubi_pkg::MuBi4False}
   } fsm_state_e;
 
 
