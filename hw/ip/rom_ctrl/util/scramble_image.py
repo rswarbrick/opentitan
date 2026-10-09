@@ -825,7 +825,7 @@ class Scrambler:
             assert found_mismatch
 
             phy_addr = self.addr_sp_enc(log_addr)
-            scr_chunk.words[phy_addr] = w32
+            scr_chunk.words[phy_addr] = w39
             print(f'  {w32:#08x},', file = self.hash_file)
         print('};', file = self.hash_file)
 
