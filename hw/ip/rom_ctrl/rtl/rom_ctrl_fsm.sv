@@ -150,11 +150,15 @@ module rom_ctrl_fsm
   //
   // There are the following logical states
   //
+  //    ReadingKAT:   We're reading the expected digest for the known answer test.
+  //    SendingKAT:   We're sending the KAT message to KMAC.
+  //    WaitingKAT:   We're waiting for a response from KMAC (for the known answer test result).
+  //    CheckingKAT:  We're checking that the KMAC response matched the expected KAT result.
   //    ReadingLow:   We're reading the low part of ROM and passing it to KMAC
-  //    ReadingHigh:  We're reading the high part of ROM and waiting for KMAC
-  //    RomAhead:     We've finished reading the high part of ROM, but are still waiting for KMAC
-  //    KmacAhead:    KMAC is done, but we're still reading the high part of ROM
-  //    Checking:     We are comparing DIGEST and EXP_DIGEST and sending data to keymgr
+  //    ReadingHigh:  We're reading the high part of ROM and waiting for KMAC.
+  //    RomAhead:     We've finished reading the high part of ROM, but are still waiting for KMAC.
+  //    KmacAhead:    KMAC is done, but we're still reading the high part of ROM.
+  //    Checking:     We are comparing DIGEST and EXP_DIGEST and sending data to keymgr.
   //    Done:         Terminal state
   //    Invalid:      Terminal and invalid state (only reachable by a glitch)
   //
@@ -162,6 +166,10 @@ module rom_ctrl_fsm
   // the result back from KMAC.
   //
   //     digraph fsm {
+  //       ReadingKAT -> SendingKAT;
+  //       SendingKAT -> WaitingKAT;
+  //       WaitingKAT -> CheckingKAT;
+  //       CheckingKAT -> ReadingLow;
   //       ReadingLow -> ReadingHigh;
   //       ReadingHigh -> RomAhead;
   //       ReadingHigh -> KmacAhead;
