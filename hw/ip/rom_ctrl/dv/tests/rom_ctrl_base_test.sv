@@ -19,6 +19,12 @@ class rom_ctrl_base_test extends cip_base_test #(
 
   // This extends a function from dv_base_test which allows us to pass handles to a sequence
   extern virtual function void configure_sequence(uvm_sequence seq);
+
+  // Write random contents to the ROM (called at the start of run_phase).
+  //
+  // This needs to be called before dv_base_test::run_phase in order to ensure the ROM has contents
+  // before a sequence starts.
+  extern local function void randomise_rom();
 endclass : rom_ctrl_base_test
 
 function rom_ctrl_base_test::new (string name, uvm_component parent);
@@ -51,6 +57,10 @@ function void rom_ctrl_base_test::initialize_env_cfg();
 endfunction
 
 task rom_ctrl_base_test::run_phase (uvm_phase phase);
+  // Randomise the contents of the ROM (which will have happened in a factory *long* before the time
+  // that is being simulated!)
+  randomise_rom();
+
   // Run a sequence in m_kmac_agent that will respond with to requests with digests
   //
   // This gets run in the background: it will run forever and we want to be able to finish the test
@@ -75,5 +85,19 @@ function void rom_ctrl_base_test::configure_sequence(uvm_sequence seq);
   // sequencer that controls the driver that can do so.
   if (cfg.get_skip_middle()) begin
     vseq.m_addr_force_sequencer = env.get_addr_force_sequencer();
+  end
+endfunction
+
+function void rom_ctrl_base_test::randomise_rom();
+  bit [31:0] rnd_data;
+
+  // Randomize the memory contents.
+  //
+  // We can't just use the mem_bkdr_util randomize_mem function because that doesn't obey the
+  // scrambling key. This wouldn't be a problem (the memory is supposed to be random!), except
+  // that we also need to pick ECC values that match.
+  for (int i = 0; i < ROM_SIZE_WORDS; i++) begin
+    `DV_CHECK_STD_RANDOMIZE_FATAL(rnd_data)
+    cfg.rom_ctrl_bkdr_util_h.rom_encrypt_write32_integ(i * 4, rnd_data, 1'b1);
   end
 endfunction

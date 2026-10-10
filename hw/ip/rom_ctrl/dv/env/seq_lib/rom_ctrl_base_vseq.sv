@@ -24,7 +24,6 @@ class rom_ctrl_base_vseq extends cip_base_vseq #(
   extern function new(string name="");
   extern virtual task dut_init(string reset_kind = "HARD");
   extern virtual task apply_reset(string kind = "HARD");
-  extern virtual task rom_ctrl_mem_init();
   extern virtual task do_rand_ops(int num_ops, bit read_only = 0);
   extern virtual task read_digest_regs();
   extern local function void set_kmac_digest(bit [AppDigestW-1:0] value);
@@ -52,7 +51,6 @@ endtask
 task rom_ctrl_base_vseq::apply_reset(string kind = "HARD");
   // Initialize memory at the beginning of reset since the DUT can come out of reset before this
   // task completes (due to the second RAL clk_rst_if)
-  rom_ctrl_mem_init();
   super.apply_reset(kind);
 
   // If cfg.get_skip_middle() is true, run a rom_ctrl_skip_middle_seq so that rom_ctrl skips over
@@ -69,21 +67,6 @@ task rom_ctrl_base_vseq::apply_reset(string kind = "HARD");
 
       skip_middle();
     end join_none
-  end
-endtask
-
-// Task to build a random rom in memory
-task rom_ctrl_base_vseq::rom_ctrl_mem_init();
-  bit [31:0] rnd_data;
-
-  // Randomize the memory contents.
-  //
-  // We can't just use the mem_bkdr_util randomize_mem function because that doesn't obey the
-  // scrambling key. This wouldn't be a problem (the memory is supposed to be random!), except
-  // that we also need to pick ECC values that match.
-  for (int i = 0; i < ROM_SIZE_WORDS; i++) begin
-    `DV_CHECK_STD_RANDOMIZE_FATAL(rnd_data)
-    cfg.rom_ctrl_bkdr_util_h.rom_encrypt_write32_integ(i * 4, rnd_data, 1'b1);
   end
 endtask
 
