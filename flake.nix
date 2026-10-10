@@ -44,6 +44,26 @@
       url = "github:IHP-GmbH/IHP-Open-PDK/dev";
       flake = false;
     };
+
+    psgen = {
+      # Note: This is a clone of the upstream version from mndstrmr, but with versions bumped to
+      # avoid strange errors about deprecated Darwin backends.
+      url = "github:rswarbrick/psgen";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+
+    lowrisc-yosys-formal = {
+      url = "https://github.com/rswarbrick/lowrisc-yosys-formal";
+      type = "git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    fpv-conductor = {
+      url = "https://github.com/rswarbrick/fpv-conductor";
+      type = "git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   nixConfig = {
@@ -60,6 +80,9 @@
     lowrisc-nix,
     nixpkgs-yosys,
     ihp-pdk,
+    psgen,
+    lowrisc-yosys-formal,
+    fpv-conductor,
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
@@ -176,6 +199,15 @@
       devShells = {
         inherit eda elab;
         default = eda;
+
+        oss-fpv = pkgs.mkShellNoCC {
+          packages = [
+            psgen.packages.${system}.default
+            pythonEnv
+            lowrisc-yosys-formal.packages.${system}.default
+            fpv-conductor.packages.${system}.default
+          ];
+        };
       };
 
       # `nix run .#eda` (or `nix run .`) drops into the EDA sandbox in your
