@@ -53,6 +53,12 @@
       inputs.flake-utils.follows = "flake-utils";
     };
 
+    yosys-slang = {
+      url = "https://github.com/rswarbrick/yosys-slang";
+      type = "git";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     lowrisc-yosys-formal = {
       url = "https://github.com/rswarbrick/lowrisc-yosys-formal";
       type = "git";
@@ -81,6 +87,7 @@
     nixpkgs-yosys,
     ihp-pdk,
     psgen,
+    yosys-slang,
     lowrisc-yosys-formal,
     fpv-conductor,
     ...
@@ -193,6 +200,18 @@
           export IHP_PDK_ROOT=${ihp-pdk}/ihp-sg13cmos5l
         '';
       });
+
+      # yosys-slang is a module that can be imported by Yosys to allow it to use slang as a
+      # frontend. Supply the correct version of yosys against which to build it.
+      yosys-slang-pkg =
+        yosys-slang.packages.${system}.default.overrideAttrs (_: {
+        });
+
+      # lowrisc-yosys-formal is a module that can be imported by Yosys to give it extra tools for
+      # formal proofs. Supply the correct version of yosys against which to build it.
+      lowrisc-yosys-formal-pkg =
+        lowrisc-yosys-formal.packages.${system}.default.overrideAttrs (_: {
+        });
     in {
       packages.pythonEnv = pythonEnv;
 
@@ -202,8 +221,10 @@
 
         oss-fpv = pkgs.mkShellNoCC {
           packages = [
+            pkgs.yosys
             psgen.packages.${system}.default
             pythonEnv
+            yosys-slang.packages.${system}.default
             lowrisc-yosys-formal.packages.${system}.default
             fpv-conductor.packages.${system}.default
           ];

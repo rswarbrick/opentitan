@@ -9,11 +9,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791965857,
-        "narHash": "sha256-F5mCLSdQirr7NkbDBGMpsVhUIH39i2Y1BsTUWT8hdwI=",
+        "lastModified": 1792079591,
+        "narHash": "sha256-9q5j+y30XMOUZ1WBHuvtBRx4BePFzO1ylQype9cjPbo=",
         "ref": "refs/heads/main",
-        "rev": "027b3763739d79f27006c13d467b36ea66734828",
-        "revCount": 3,
+        "rev": "81e4c141600f6c8b8ec29764d72a1d202ead070d",
+        "revCount": 9,
         "type": "git",
         "url": "https://github.com/rswarbrick/aig-manip"
       },
@@ -133,11 +133,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1791969309,
-        "narHash": "sha256-ZmazM2mZvUNQe5+k9X374lP6FpW2emxJ5D4iDwZxJoA=",
+        "lastModified": 1792093677,
+        "narHash": "sha256-jaH9EFBwF5kipvLWHKXbk7lUypTO6gVSbA5S/YbZu+w=",
         "ref": "refs/heads/main",
-        "rev": "a6511bf28d8a88882a475df77c8cf0c6187ce7ce",
-        "revCount": 20,
+        "rev": "9316b1c3ffa5b54b67db955039f94968f125fe91",
+        "revCount": 36,
         "type": "git",
         "url": "https://github.com/rswarbrick/fpv-conductor"
       },
@@ -408,7 +408,8 @@
         "psgen": "psgen",
         "pyproject-build-systems": "pyproject-build-systems_2",
         "pyproject-nix": "pyproject-nix_2",
-        "uv2nix": "uv2nix_2"
+        "uv2nix": "uv2nix_2",
+        "yosys-slang": "yosys-slang"
       }
     },
     "rust-analyzer-src": {
@@ -536,6 +537,27 @@
         "owner": "pyproject-nix",
         "repo": "uv2nix",
         "type": "github"
+      }
+    },
+    "yosys-slang": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791728420,
+        "narHash": "sha256-2JjX5Sbgfy5pNK4KAi9rxd/zg3u3us9FvptksPJKJn4=",
+        "ref": "refs/heads/formal",
+        "rev": "4563adca3901fb0a3d996ab68b2501a6159b5147",
+        "revCount": 502,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/rswarbrick/yosys-slang"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://github.com/rswarbrick/yosys-slang"
       }
     }
   },
