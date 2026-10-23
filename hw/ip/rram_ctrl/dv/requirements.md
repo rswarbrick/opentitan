@@ -1168,35 +1168,35 @@ From specification documents, the requirements can be broken into the following 
 Grouped by type.
 The prefix `RRAM_CTRL.` is omitted.
 
-- **Bus integrity**: `REG.BUS.INTEGRITY`, `HOST.BUS.INTEGRITY`, `MEM.BUS.INTEGRITY`
+- **13.1** (Bus integrity): `REG.BUS.INTEGRITY`, `HOST.BUS.INTEGRITY`, `MEM.BUS.INTEGRITY`
 
   Source for requirement: I
 
-- **Data protection**: `MEM.ADDR_INFECTION`, `MEM.SCRAMBLE`, `SCRAMBLE.KEY.SIDELOAD`, `MEM.INTEGRITY`, `OTP.MEM.INTEGRITY`, `MEM.READBACK`
+- **13.2** (Data protection): `MEM.ADDR_INFECTION`, `MEM.SCRAMBLE`, `SCRAMBLE.KEY.SIDELOAD`, `MEM.INTEGRITY`, `OTP.MEM.INTEGRITY`, `MEM.READBACK`
 
   Source for requirement: I
 
-- **Config locking**: `CTRL.CONFIG.REGWEN`, `DATA_REGIONS.CONFIG.REGWEN`, `INFO_PAGE.CONFIG.REGWEN`
+- **13.3** (Config locking): `CTRL.CONFIG.REGWEN`, `DATA_REGIONS.CONFIG.REGWEN`, `INFO_PAGE.CONFIG.REGWEN`
 
   Source for requirement: I
 
-- **Disable and escalation**: `MEM.CTRL.GLOBAL_ESC`, `MEM.CTRL.LOCAL_ESC`, `MEM_DISABLE.CONFIG.MUBI`, `EXEC.CONFIG.REDUN`, `LC_CTRL.INTERSIG.MUBI`
+- **13.4** (Disable and escalation): `MEM.CTRL.GLOBAL_ESC`, `MEM.CTRL.LOCAL_ESC`, `MEM_DISABLE.CONFIG.MUBI`, `EXEC.CONFIG.REDUN`, `LC_CTRL.INTERSIG.MUBI`
 
   Source for requirement: I
 
-- **Secure wipe**: `RMA_ENTRY.MEM.SEC_WIPE`
+- **13.5** (Secure wipe): `RMA_ENTRY.MEM.SEC_WIPE`
 
   Source for requirement: I
 
-- **Sparse FSMs**: `CTRL.FSM.SPARSE` (lcmgr, otp, arb, rd/wr), `PHY_WR.FSM.SPARSE`, `HOST_TL_LC_GATE.FSM.SPARSE`, `WR_TL_LC_GATE.FSM.SPARSE`
+- **13.6** (Sparse FSMs): `CTRL.FSM.SPARSE` (lcmgr, otp, arb, rd/wr), `PHY_WR.FSM.SPARSE`, `HOST_TL_LC_GATE.FSM.SPARSE`, `WR_TL_LC_GATE.FSM.SPARSE`
 
   Source for requirement: I
 
-- **Redundant counters, arbiters and FIFOs**: `CTR.REDUN`, `FIFO.CTR.REDUN`, `PHY_ARBITER.CTRL.REDUN`
+- **13.7** (Redundant counters, arbiters and FIFOs): `CTR.REDUN`, `FIFO.CTR.REDUN`, `PHY_ARBITER.CTRL.REDUN`
 
   Source for requirement: I
 
-- **Consistency checks**: `PHY_HOST_GRANT.CTRL.CONSISTENCY`, `PHY_RSP.CTRL.CONSISTENCY`, `PHY_RD_RSP.CTRL.INTEGRITY`, `PHY_RD_BUF.CTRL.INTEGRITY`
+- **13.8** (Consistency checks): `PHY_HOST_GRANT.CTRL.CONSISTENCY`, `PHY_RSP.CTRL.CONSISTENCY`, `PHY_RD_RSP.CTRL.INTEGRITY`, `PHY_RD_BUF.CTRL.INTEGRITY`
 
   Source for requirement: I
 
