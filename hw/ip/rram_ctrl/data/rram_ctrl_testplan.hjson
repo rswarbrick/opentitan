@@ -760,6 +760,34 @@
 
   covergroups: [
     {
+      name: data_page_access_cg
+      desc: '''
+            See accesses to the extreme pages and an internal page for each of the three interfaces
+            that can access the data partition (host, SW and lcmgr-hw-if).
+            '''
+    }
+    {
+      name: otp_page_access_cg
+      desc: '''
+            See accesses to the OTP integrity page (at OtpIntgStartAddr), which should work when
+            accessed through otp-hw-if and should be rejected from the host and SW sources.
+
+            Also see successful accesses to each of the other OTP pages (4091-4095) through
+            otp-hw-if, together with failed accesses to the top page (the top address in the
+            partition) from host and SW.
+            '''
+    }
+    {
+      name: info_page_access_cg
+      desc: '''
+            See accesses to info pages 0, 5, 6 and 7 (extreme pages and each named page), crossed
+            with the access method: SW and lcmgr-hw-if.
+
+            Also see an unsuccessful access to an info page from the host interface.
+            '''
+    }
+
+    {
       name: control_cg
       desc: '''
             Covers all `CONTROL.OP` values (including reserved ones) crossed with
