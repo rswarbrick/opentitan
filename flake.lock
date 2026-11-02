@@ -133,11 +133,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1793121448,
-        "narHash": "sha256-7clljx5MzIzuVIonsaDq7uRcRGFC+gKTkgZlPhkpf9E=",
+        "lastModified": 1793648672,
+        "narHash": "sha256-kBlHDMx0QiyqtA4ln5CUlbOZkiwewQofWCF+NxBknNs=",
         "ref": "refs/heads/main",
-        "rev": "8de3610bfa324c26b4a7ee847d1b5cf2f20a4b20",
-        "revCount": 37,
+        "rev": "b56b73c92162882915f98297720a301b9c64c969",
+        "revCount": 38,
         "type": "git",
         "url": "https://github.com/rswarbrick/fpv-conductor"
       },
