@@ -6,7 +6,6 @@
 #
 #   @fusesoc-dir@    The directory where fusesoc created its .scr file
 #   @fusesoc-scr@    The scr file itself
-#   @formal-src@     The directory that contains this template and also the handwritten .sv files
 #   @build@          The directory in which to create output files
 
 # Parse and lower the Ibex and specification RTL.
@@ -14,7 +13,6 @@ read_slang                      \
   --top tb -DSYNTHESIS -DYOSYS  \
   -I @build@                    \
   -F @fusesoc-scr@              \
-  @formal-src@/tb.sv            \
   --single-unit                 \
   --no-proc
 
