@@ -91,7 +91,7 @@
     lowrisc-yosys-formal,
     fpv-conductor,
     ...
-  }:
+  }@inputs:
     flake-utils.lib.eachDefaultSystem (system: let
       inherit (nixpkgs) lib;
       pkgs = nixpkgs.legacyPackages.${system};
@@ -227,6 +227,10 @@
             yosys-slang.packages.${system}.default
             lowrisc-yosys-formal.packages.${system}.default
             fpv-conductor.packages.${system}.default
+            # Get the ric3 and aig-manip tools used by fpv-conductor. These are also needed in the
+            # devShell in order to look at counterexample traces
+            fpv-conductor.packages.${system}.ric3
+            fpv-conductor.inputs.aig-manip.packages.${system}.default
           ];
         };
       };
