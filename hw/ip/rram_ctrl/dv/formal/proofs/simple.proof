@@ -2,11 +2,22 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-# A placeholder lemma which is trivially true (it's also FifoDepthCheck_A in rram_ctrl.sv), but lets
-# us check that the tooling works
-lemma example
-  FifoDepthCheck: have ((WrFifoDepth <= MaxFifoDepth) &
-                        (RdFifoDepth <= MaxFifoDepth))
-
-
-
+# Requirement 1.6:
+#
+#   Access to an emulated info page through host_tl is always blocked
+#
+# Here, "blocked" means that the D-channel response to the A-channel transaction will have d_error=1
+# and there will be junk data in d_data.
+#
+#  - The "host_tl_snapshot_rsp_now" signal (defined in tb.sv) tracks the fact that we are seeing a
+#    D-channel response on host_tl.
+#
+#  - If host_tl_req_snapshot_in_info_region is true then the snapshotted A-channel transaction is
+#    reading an address in an emulated info region.
+#
+#  - If so, the D-channel response should have d_error=1.
+lemma req_1_6
+  ErrorOnHostInfoRead: have (host_tl_snapshot_rsp_now &&
+                             host_tl_req_snapshot_in_info_region
+                             |->
+                             host_tl_o.d_error)

@@ -17,7 +17,7 @@ psgen-srcs  := $(wildcard $(src-dir)proofs/*.proof)
 psgen-flags := -task -root rram_ctrl
 
 # The name of the directory generated for the directory from lowrisc:ip:rram_ctrl
-hw-fusesoc-dir-name := lowrisc_ip_rram_ctrl_0.1
+hw-fusesoc-dir-name := lowrisc_dv_rram_ctrl_formal_tb_0.1
 
 # The path to the directory in which fusesoc writes files (in the rule that generates the .stamp file)
 fusesoc-dir-path := $(scratch)/$(hw-fusesoc-dir-name)/default-vcs/
@@ -34,7 +34,7 @@ aig: $(scratch)/all.aig
 clean:
 	rm -rf $(scratch)
 
-$(scratch)/fusesoc.stamp: $(rram-ctrl-dir)/rtl
+$(scratch)/fusesoc.stamp: $(rram-ctrl-dir)/rtl/*.sv *.sv
 	mkdir -p $(@D)
 	fusesoc                                   \
 	  --cores-root $(ot-top)                  \
@@ -43,12 +43,12 @@ $(scratch)/fusesoc.stamp: $(rram-ctrl-dir)/rtl
 	  --build-root $(@D)                      \
 	  --tool vcs                              \
 	  --setup                                 \
-	  lowrisc:ip:rram_ctrl
+	  lowrisc:dv:rram_ctrl_formal_tb
 	touch $@
 
-$(scratch)/psgen-yosys.svh: $(scratch)/fusesoc.stamp $(psgen-srcs)
+$(scratch)/psgen-yosys.svh: $(psgen-srcs)
 	psgen $(addprefix -path ,$(psgen-srcs)) \
-	      -root example                     \
+	      -root req_1_6                     \
 	      -task                             \
 	      -sv-out $@                        \
 	      -clocking                         \
@@ -64,7 +64,6 @@ $(scratch)/tpl.awk:
 	echo '  gsub("#.*", "")' >>$@
 	echo '  gsub("@fusesoc-dir@", "$(fusesoc-dir-path)")' >>$@
 	echo '  gsub("@fusesoc-scr@", "$(hw-scr-path)")' >>$@
-	echo '  gsub("@formal-src@", "$(rram-ctrl-dir)/dv/formal")' >>$@
 	echo '  gsub("@build@", "$(scratch)")' >>$@
 	echo '  print($$0)' >>$@
 	echo '}' >>$@
