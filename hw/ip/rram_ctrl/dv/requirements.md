@@ -15,6 +15,7 @@ However, the `SecScrambleEn` parameter is assumed to be true.
 To support a version of `rram_ctrl` with `SecScrambleEn=0`, this document would need to be generalised.
 
 From specification documents, the requirements can be broken into the following set of buckets:
+0. High-level requirements
 1. Memory organisation and address map
 2. Bus interfaces (TL-UL)
 3. Software operation interface (CONTROL / ADDR / FIFOs)
@@ -29,6 +30,29 @@ From specification documents, the requirements can be broken into the following 
 12. Disable / execute / escalation controls
 13. Security countermeasures
 14. Register-level conventions (REGWEN, reset values, MuBi encoding)
+
+## 0. High-level requirements
+
+These requirements are intended to describe features that the block should have.
+In each case, they map to more specific requirements in the later sections.
+
+- **0.1**: It must be possible to execute code from RRAM
+
+  Executing code requires fetches through `host_tl`, which is described in requirement 2.2.
+  The specific feature to allow fetches is described in requirement 12.3.
+
+  Source for requirement: F (`FETCH_CODE`)
+
+- **0.2**: It must be possible to read/write data in the RRAM while code is running from RRAM (requires arbitration)
+
+??? Grr. Haven't I just ripped out an arbitration requirement?
+
+- **0.3**: The OTP of Earlgrey must be mapped to RRAM
+- **0.4**: RRAM must be disabled when the life cycle controller escalates
+- **0.5**: The RRAM must support ECC and scrambling.
+- **0.6**: The RRAM must be configurable in different sections with different read/write permissions, and ECC & scrambling settings.
+- **0.7**: The RRAM controller must not return wrong data without an error indication under fault injection
+- **0.8**: Upon RMA-request the RRAM is wiped and overwritten with pseudo random data (except for the OTP partition)
 
 ## 1. Memory organisation and address map
 
