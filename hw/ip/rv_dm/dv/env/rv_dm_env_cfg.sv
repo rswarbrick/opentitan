@@ -53,7 +53,7 @@ class rv_dm_env_cfg extends cip_base_env_cfg #(.RAL_T(rv_dm_regs_reg_block));
 
   virtual function void set_is_active(bit active);
     super.set_is_active(active);
-    m_mode_agent_cfg.is_active = active;
+    m_mode_agent_cfg.if_mode = is_active ? Host : Monitor;
   endfunction
 
   virtual function void initialize(bit inherit_ral_models = 1'b0);
@@ -83,13 +83,11 @@ class rv_dm_env_cfg extends cip_base_env_cfg #(.RAL_T(rv_dm_regs_reg_block));
     // Create jtag agent config obj
     m_jtag_agent_cfg = jtag_agent_cfg::type_id::create("m_jtag_agent_cfg");
     m_jtag_agent_cfg.if_mode = dv_utils_pkg::Host;
-    m_jtag_agent_cfg.is_active = 1'b1;
     m_jtag_agent_cfg.ir_len = JTAG_IR_LEN;
 
     // Create TL agent config obj for the SBA port.
     m_tl_sba_agent_cfg = tl_agent_cfg::type_id::create("m_tl_sba_agent_cfg");
     m_tl_sba_agent_cfg.if_mode = dv_utils_pkg::Device;
-    m_tl_sba_agent_cfg.is_active = 1'b1;
     m_tl_sba_agent_cfg.max_outstanding_req = 1;
 
     // If inherit_ral_models is false, create a JTAG DTM RAL and give it the right IDCODE register
