@@ -51,7 +51,7 @@ class ${module_instance_name}_env_cfg extends cip_base_env_cfg #(.RAL_T(${module
     m_lpg_agent_cfg = lpg_agent_cfg::type_id::create("m_lpg_agent_cfg");
 
     m_ping_req_agent_cfg = ping_req_agent_cfg::type_id::create("m_ping_req_agent_cfg");
-    m_ping_req_agent_cfg.is_active = 1'b0;
+    m_ping_req_agent_cfg.if_mode = dv_utils_pkg::Monitor;
 
     m_ping_timer_force_agent_cfg =
       ping_timer_force_agent_cfg::type_id::create("m_ping_timer_force_agent_cfg");
