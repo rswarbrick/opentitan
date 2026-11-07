@@ -50,10 +50,12 @@ endfunction
 
 function void dv_reactive_agent::connect_phase(uvm_phase phase);
   super.connect_phase(phase);
-  if (cfg.is_active && cfg.has_req_fifo) begin
-    monitor.req_analysis_port.connect(sequencer.req_analysis_fifo.analysis_export);
-  end
-  if (cfg.is_active && cfg.has_rsp_fifo) begin
-    monitor.rsp_analysis_port.connect(sequencer.rsp_analysis_fifo.analysis_export);
+  if (cfg.get_is_active()) begin
+    if (cfg.has_req_fifo) begin
+      monitor.req_analysis_port.connect(sequencer.req_analysis_fifo.analysis_export);
+    end
+    if (cfg.has_rsp_fifo) begin
+      monitor.rsp_analysis_port.connect(sequencer.rsp_analysis_fifo.analysis_export);
+    end
   end
 endfunction

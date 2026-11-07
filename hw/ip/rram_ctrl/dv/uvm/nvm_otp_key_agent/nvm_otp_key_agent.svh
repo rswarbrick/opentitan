@@ -37,16 +37,13 @@ function void nvm_otp_key_agent::build_phase(uvm_phase phase);
     `uvm_fatal("unsupported_mode", "This agent cannot send key requests.")
   end
 
-  // Set the mode of the interface (since we're now in control of it) to cfg.if_mode, but qualified
-  // by is_active.
-  //
-  // TODO(#32210): This is a bit silly because some of the combinations aren't relevant.
-  cfg.m_vif.if_mode = cfg.is_active ? cfg.if_mode : dv_utils_pkg::Monitor;
+  // Set the mode of the interface (since we're now in control of it) to cfg.if_mode.
+  cfg.m_vif.if_mode = cfg.if_mode;
 endfunction
 
 function void nvm_otp_key_agent::connect_phase(uvm_phase phase);
   super.connect_phase(phase);
-  if (cfg.is_active) begin
+  if (cfg.get_is_active()) begin
     driver.m_req_port.connect(sequencer.m_req_fifo.analysis_export);
   end
 endfunction
@@ -54,7 +51,7 @@ endfunction
 task nvm_otp_key_agent::run_device_seq();
   nvm_otp_key_seq seq = nvm_otp_key_seq::type_id::create("seq");
 
-  if (!cfg.is_active) begin
+  if (cfg.if_mode == dv_utils_pkg::Monitor) begin
     `uvm_fatal("passive_seq", "Cannot start device sequence: the agent is passive.")
   end
 
