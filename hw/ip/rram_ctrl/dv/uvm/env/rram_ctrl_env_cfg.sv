@@ -46,7 +46,7 @@ endfunction : new
 
 function void rram_ctrl_env_cfg::set_is_active(bit active);
   super.set_is_active(active);
-  m_key_agent_cfg.is_active = active;
+  m_key_agent_cfg.if_mode = active ? Device : Monitor;
 endfunction
 
 function void rram_ctrl_env_cfg::initialize(bit inherit_ral_models = 1'b0);

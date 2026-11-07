@@ -50,7 +50,7 @@ class tl_agent_env extends dv_base_env #(.CFG_T               (tl_agent_env_cfg)
   function void connect_phase(uvm_phase phase);
     super.connect_phase(phase);
     // Connect virtual sequencer
-    if (cfg.is_active) begin
+    if (cfg.get_is_active()) begin
       virtual_sequencer.host_seqr = host_agent.sequencer;
       virtual_sequencer.device_seqr = device_agent.sequencer;
     end

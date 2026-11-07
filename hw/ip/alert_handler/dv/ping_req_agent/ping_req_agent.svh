@@ -31,7 +31,7 @@ function void ping_req_agent::build_phase(uvm_phase phase);
 
   // Make sure that the agent isn't configured to be active: that wouldn't make sense for this
   // agent.
-  if (cfg.is_active) begin
+  if (cfg.get_is_active()) begin
     `uvm_fatal("passive_agent", "This agent cannot be active.")
   end
 endfunction
