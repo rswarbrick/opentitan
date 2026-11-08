@@ -3,11 +3,24 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Implements functional coverage for edn.
-interface edn_cov_if (
-  input logic                         clk_i,
-  input logic [`NUM_END_POINTS - 1:0] ep_req
-);
+//
+// Note that this is a "max footprint" interface, which can accept up to MaxEndPoints endpoints. The
+// actual number of endpoints is supplied in a num_endpoints_i port, which is driven by a parameter
+// at the bind site.
 
+interface edn_cov_if
+  import edn_pkg::edn_req_t;
+#(
+  localparam int unsigned MaxEndPoints = 16
+) (
+  input logic                        clk_i,
+  input edn_req_t [MaxEndPoints-1:0] edn_i,
+
+  // The number of endpoints. This will be supplied by the bind site. It's a constant, but is passed
+  // as a port instead of a parameter in order to avoid the interface being parameterised (which
+  // would make passing it through uvm_config_db difficult).
+  input int unsigned                 num_endpoints_i
+);
   import uvm_pkg::*;
   import dv_utils_pkg::*;
   import edn_pkg::*;
@@ -18,13 +31,15 @@ interface edn_cov_if (
 
   bit en_full_cov = 1'b1;
   bit en_intg_cov = 1'b1;
-  bit [`NUM_END_POINTS - 1:0] ep_requests;
+  bit [MaxEndPoints - 1:0] ep_requests;
 
   // If en_full_cov is set, then en_intg_cov must also be set since it is a subset.
   bit en_intg_cov_loc;
   assign en_intg_cov_loc = en_full_cov | en_intg_cov;
 
-  assign ep_requests = ep_req;
+  for (genvar i = 0; i < MaxEndPoints; i++) begin
+    assign ep_requests[i] = (i < num_endpoints_i) ? edn_i[i].edn_req : 'x;
+  end
 
   covergroup edn_cfg_cg with function sample(uint    num_endpoints,
                                              uint    num_boot_reqs,
