@@ -33,6 +33,8 @@ package rram_ctrl_env_pkg;
   import rram_ctrl_reg_pkg::NumRegions;
   import rram_ctrl_reg_pkg::NumDataPages;
   import rram_ctrl_reg_pkg::NumInfoPages;
+  import rram_ctrl_reg_pkg::NumEmulInfoRegions;
+  import rram_ctrl_reg_pkg::NumEmulInfoSubregions;
   import rram_ctrl_reg_pkg::WordsPerPage;
 
   import mem_bkdr_util_pkg::mem_bkdr_util;
