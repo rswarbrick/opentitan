@@ -12,6 +12,35 @@ class rram_ctrl_scoreboard extends cip_base_scoreboard #(
 );
   `uvm_component_utils(rram_ctrl_scoreboard)
 
+  // A model of the current state of a read or write FIFO. All of the "pointers" are measured in
+  // 32-bit words. The RRAM word index can by found by dividing by (DataWidth / 32).
+  typedef struct {
+    // The current SW operation type. This is only relevant if next_d_bus_idx < last_bus_idx.
+    bit          is_write_op;
+
+    // The 32-bit word addressed by the operation.
+    int unsigned first_bus_idx;
+
+    // The index of the last 32-bit word touched by the operation. When this struct is cleared,
+    // last_bus_idx is zeroed and next_a_bus_idx and next_d_bus_idx are both set to '1.
+    int unsigned last_bus_idx;
+
+    // The bus word that will be addressed by the next read or write that appears on the A channel
+    int unsigned next_a_bus_idx;
+
+    // The bus word that will be addressed by the next read or write that appears on the D channel.
+    int unsigned next_d_bus_idx;
+  } fifo_ptr_t;
+
+  // A simple encoding of an "option type" for 32-bit values
+  typedef struct {
+    // True if this value is considered known, in which case value is meaningful.
+    bit        known;
+
+    // The modelled 32-bit value
+    bit [31:0] value;
+  } maybe_b32_t;
+
   // Auto-predicts the core RAL model from bus traffic. m_tl_core_reg_adapter mirrors
   // cip_base_env's own (private) frontdoor adapter config. m_tl_core_reg_predictor_filter
   // drops d_error'd items before the predictor sees them (see rram_ctrl_reg_predictor_filter.sv
@@ -75,6 +104,24 @@ class rram_ctrl_scoreboard extends cip_base_scoreboard #(
   // A model of the info partition in RRAM
   local rram_partition_model m_info_partition;
 
+  // A model of the current state of the fifo that is in use. This will either be the read or write
+  // fifo (but we can use the same information because only one fifo is used at once)
+  local fifo_ptr_t m_fifo_ptr;
+
+  // 32-bit words between the bus and the FIFO.
+  //
+  // For write operations, a 32-bit word is added to the queue when the A channel operation is seen
+  // (from a_data) and these words are popped from the queue and written to the RRAM model in groups
+  // of (DataWidth/32) when the last D-channel operation is seen for an RRAM word. The values pushed
+  // in are always marked "known" (but the code consuming them in on_mem_access won't bother
+  // checking).
+  //
+  // For read operations, an RRAM word is read from the RRAM model when the A channel operation for
+  // its first 32-bit word is seen. This is unpacked into multiple 32-bit words that are added to
+  // the queue and are then popped and compared with a_data values when D channel operations are
+  // seen.
+  local maybe_b32_t m_fifo_pending[$];
+
   // An associative array of generations in m_data_partition that have been taken at the start of
   // host_tl read operations. These are keyed by the TL sequence item's a_source value, which can be
   // used to look up the generation when the response comes back.
@@ -127,7 +174,31 @@ class rram_ctrl_scoreboard extends cip_base_scoreboard #(
   //     action. For example, writing to the CONTROL register (to configure or start on operation).
   extern local function void on_reg_access(tl_seq_item item, tl_phase_e tl_phase, uvm_reg csr);
 
-  extern function void on_mem_access(tl_seq_item item, tl_phase_e tl_phase, uvm_mem memory);
+  // A call-back run by process_tl_core_access when it sees a read to or write from a memory (the
+  // rd_fifo and wr_fifo addresses).
+  //
+  // This function collects accesses to the fifo and converts them between bus operations and
+  // operations on (longer) RRAM words. It updates the RRAM prediction after writes and checks read
+  // data for reads.
+  extern local function void on_mem_access(tl_seq_item item, tl_phase_e tl_phase, uvm_mem memory);
+
+  // True if there is currently the requested a SW operation in progress and it still expects to
+  // transmit words on the given channel.
+  //
+  //   - write_op:  Look at Write operations (not Read or Rewrite operations)
+  //   - d_channel: Look at counters for the D (not A) channel.
+  extern local function bit is_sw_op_in_progress(bit write_op, bit d_channel);
+
+  // Called when a SW operation is started by a write to CONTROL when CTRL_REGWEN=1.
+  //
+  // The arguments are the wdata for the fields of the register. This sets the modelled state of the
+  // appropriate FIFO, causing bus accesses to rd_fifo/wr_fifo to have an effect.
+  extern local function void start_sw_operation(bit [1:0] op, bit partition, bit [9:0] num);
+
+  // Called when a SW operation runs to completion (maybe because the last corresponding FIFO
+  // operation has run). Clear the modelled value of CONTROL.START and zero out the fifo pointer.
+  extern local function void end_sw_operation();
+
   extern task process_tl_prim_access(tl_seq_item item, uvm_reg_addr_t csr_addr,
                                      tl_phase_e tl_phase);
 
@@ -461,7 +532,30 @@ function void rram_ctrl_scoreboard::on_reg_access(tl_seq_item item, tl_phase_e t
   end else if (csr == ral.ctrl_regwen) begin
     // TODO(#31290): rdata is not currently predicted for CTRL_REGWEN.
   end else if (csr == ral.control) begin
-    // TODO(#31290): The action of writing to CONTROL is not currently modelled in the scoreboard.
+    if (tl_phase == DataWrite && !item.d_error && m_cbs.get_reg_prediction(ral.ctrl_regwen)) begin
+      // This is the D channel response to a transaction to writing item.a_data to CONTROL. The
+      // transaction didn't get an error response and the modelled value of CTRL_REGWEN is true.
+      //
+      // If the write sets START=1, it will start a SW operation.
+      if ((item.a_data >> ral.control.start.get_lsb_pos()) & 1) begin
+        // This write will start a SW operation
+        bit [1:0] op = (item.a_data >> ral.control.op.get_lsb_pos());
+        bit partition = (item.a_data >> ral.control.partition.get_lsb_pos());
+        bit [9:0] num = (item.a_data >> ral.control.num.get_lsb_pos());
+
+        start_sw_operation(op, partition, num);
+      end
+
+      // No need to update the prediction for the register contents: that will be handled by
+      // m_tl_core_reg_predictor.
+
+    end else if (tl_phase == DataRead) begin
+      // TODO!
+      // - We don't expect an error
+      // - We have a model of the value
+
+      uvm_reg_data_t exp_rdata = m_cbs.get_reg_prediction(ral.control);
+    end
   end else if (csr == ral.op_status) begin
     // TODO(#31290): rdata is not currently predicted for OP_STATUS.
   end else if (csr == ral.status) begin
@@ -502,8 +596,292 @@ endfunction : on_reg_access
 
 function void rram_ctrl_scoreboard::on_mem_access(tl_seq_item item, tl_phase_e tl_phase,
                                                   uvm_mem memory);
-  // TODO(#31291): track wr_fifo/rd_fifo occupancy and cross-check against fifo_lvl/curr_fifo_lvl.
+  // The number of 32-bit bus words in each RRAM word.
+  int unsigned bus_words_per_word = DataWidth / 32;
+
+  if (memory == ral.wr_fifo) begin
+    case (tl_phase)
+      AddrWrite: begin
+        // The write to the FIFO only has an effect if there is a Write operation in progress, which
+        // still expects a value on the A channel. If not, it will be discarded.
+        if (is_sw_op_in_progress(.write_op(1), .d_channel(0))) begin
+          // Is this the first 32-bit word in a particular RRAM word? Since writes must be aligned
+          // to RRAM words, this will only ever happen when next_a_bus_idx is divisible by
+          // bus_words_per_word.
+          if (m_fifo_ptr.next_a_bus_idx % bus_words_per_word == 0) begin
+            // Since this is the first bus word of the RRAM word, tell the data partition that the
+            // appropriate word has a write operation incoming.
+            m_data_partition.start_write_operation(m_fifo_ptr.next_a_bus_idx / bus_words_per_word);
+          end
+
+          // Either way, push the 32-bit word into m_fifo_pending and increment next_a_bus_idx
+          // (supporting pipelining if the hardware does)
+          m_fifo_pending.push_back('{known: 1, value: item.a_data});
+          m_fifo_ptr.next_a_bus_idx++;
+        end
+      end
+      DataWrite: begin
+        // The TL write of a word to the FIFO has just completed. This only has an effect if there
+        // is a Write operation in progress, which still expects to report a transaction on the D
+        // channel. If not, it will be ignored.
+        if (is_sw_op_in_progress(.write_op(1), .d_channel(1))) begin
+          int unsigned next_word_idx = m_fifo_ptr.next_d_bus_idx / bus_words_per_word;
+
+          // This D channel response shows that the 32-bit write has completed. If this is the last
+          // of the bus_words_per_word words for an RRAM word, tell the partition model that the
+          // RRAM word write is complete, popping the 32-bit items from m_write_fifo_pending.
+          if ((m_fifo_ptr.next_d_bus_idx + 1) % bus_words_per_word == 0) begin
+            bit [DataWidth-1:0] wdata;
+
+            // There should be at least bus_words_per_word items in m_write_fifo_pending
+            if (m_fifo_pending.size() < bus_words_per_word) begin
+              `uvm_fatal("write_fifo_match",
+                         $sformatf({"When writing to WR_FIFO with bus index 0x%0h, there are only ",
+                                    "%0d items in m_fifo_pending (not %0d)."},
+                                   m_fifo_ptr.next_d_bus_idx,
+                                   m_fifo_pending.size(),
+                                   bus_words_per_word))
+            end
+
+            for (int unsigned i = 0; i < bus_words_per_word; i++) begin
+              wdata[i * 32 +: 32] = m_fifo_pending.pop_front().value;
+            end
+
+            m_data_partition.complete_write_operation(next_word_idx, wdata);
+          end
+
+          // Either way, increment next_d_bus_idx
+          m_fifo_ptr.next_d_bus_idx++;
+
+          // If doing this means it becomes greater than last_bus_idx, mark the SW operation
+          // complete.
+          if (m_fifo_ptr.next_d_bus_idx > m_fifo_ptr.last_bus_idx) begin
+            end_sw_operation();
+          end
+        end
+      end
+      AddrRead, DataRead: begin
+        // Because this is a write-only memory, the infrastructure in
+        // cip_base_scoreboard::process_tl_*_item should have predicted an error and not passed the
+        // item down to process_tl_core_access (which called on_mem_access).
+        `uvm_fatal("missed_error",
+                   "Read access to write FIFO should have been caught by cip_base_scoreboard.")
+      end
+      default: `uvm_fatal("bad_phase", $sformatf("Unknown tl_phase: %0d", tl_phase))
+    endcase
+  end else if (memory == ral.rd_fifo) begin
+    case (tl_phase)
+      AddrRead: begin
+        // If there is no operation in progress, the specification doesn't actually say what
+        // happens. Replace this with something sensible when issue #32461 is resolved.
+        if (!is_sw_op_in_progress(.write_op(0), .d_channel(0))) begin
+          `uvm_error("unspecified_rd_fifo",
+                     "No specification for rd_fifo accesses when no operation in progress.")
+        end else begin
+          // If this is the first 32-bit word in an RRAM word (either because the next_a_bus_idx is
+          // a multiple of bus_words_per_word or because it equals first_bus_idx), grab that word's
+          // value and append bus words to m_read_fifo_pending (from which we will pop values when
+          // comparing D channel transactions).
+          if ((m_fifo_ptr.next_a_bus_idx == m_fifo_ptr.first_bus_idx) ||
+              (m_fifo_ptr.next_a_bus_idx % bus_words_per_word == 0)) begin
+            int unsigned word_idx = m_fifo_ptr.next_a_bus_idx / bus_words_per_word;
+            int unsigned lo_lane, hi_lane;
+
+            // Handle partial RRAM words here by working out which bus words to look at. The first
+            // one will be next_a_bus_idx, modulo bus_words_per_word. The last will normally
+            // bus_words_per_word - 1, but might be truncated if this is the last RRAM word.
+            //
+            // end_word_bus_word is the bus word index for the end of the current RRAM word.
+            // last_addressed_bus_word is highest bus word index in the current RRAM word that is
+            // addressed by this operation (clamping with last_bus_idx).
+            int unsigned end_word_bus_idx = (word_idx + 1) * bus_words_per_word - 1;
+            int unsigned cur_last_bus_idx = ((end_word_bus_idx < m_fifo_ptr.last_bus_idx) ?
+                                             end_word_bus_idx : m_fifo_ptr.last_bus_idx);
+
+            // At this point, next_a_bus_idx and cur_last_bus_idx give the bounds for the bus words
+            // that are being extracted from the current RRAM word. As a simple consistency check,
+            // make sure that next_a_bus_idx and cur_last_bus_idx both point at the same RRAM word.
+            if (word_idx != (cur_last_bus_idx / bus_words_per_word)) begin
+              `uvm_fatal("bus_sample_err",
+                         $sformatf({"When computing bus words to read starting at bus idx 0x%0h, ",
+                                    "we expect to read up to index 0x%0h. But these indices are ",
+                                    "from different RRAM words (0x%0h and 0x%0h)."},
+                                   m_fifo_ptr.next_a_bus_idx, cur_last_bus_idx,
+                                   word_idx, (cur_last_bus_idx / bus_words_per_word)))
+            end
+
+            // Work modulo bus_words_per_word to get indices of 32-bit "lanes" of the RRAM word.
+            lo_lane = m_fifo_ptr.next_a_bus_idx % bus_words_per_word;
+            hi_lane = cur_last_bus_idx % bus_words_per_word;
+
+            if (m_data_partition.get_known(word_idx)) begin
+              bit [DataWidth-1:0] rdata = m_data_partition.get_value(word_idx);
+              for (int unsigned i = lo_lane; i <= hi_lane; i++) begin
+                `uvm_info("rjs",
+                          $sformatf("Expect lane %0d to hold 0x%0h", i, rdata[32 * i +: 32]),
+                          UVM_LOW)
+                m_fifo_pending.push_back('{known: 1, value: rdata[32 * i +: 32]});
+              end
+            end else begin
+              repeat (hi_lane - lo_lane + 1) begin
+                m_fifo_pending.push_back('{default: '0});
+              end
+            end
+          end
+
+          // Either way, increment next_a_bus_idx
+          m_fifo_ptr.next_a_bus_idx++;
+        end
+      end
+      DataRead: begin
+        // If there is no operation in progress, the specification doesn't actually say what
+        // happens. Replace this with something sensible when issue #32461 is resolved.
+        if (!is_sw_op_in_progress(.write_op(0), .d_channel(1))) begin
+          `uvm_error("unspecified_rd_fifo",
+                     "No specification for rd_fifo accesses when no operation in progress.")
+        end else begin
+          maybe_b32_t exp_value;
+
+          // There should be at least one item in m_fifo_pending (as part of a group that were
+          // pushed for the first A channel transaction for this RRAM word).
+          if (!m_fifo_pending.size()) begin
+            `uvm_fatal("empty_fifo_pending",
+                       "D channel transaction reading from rd_fifo with no pending data.")
+          end
+
+          exp_value = m_fifo_pending.pop_front();
+
+          if (!exp_value.known) begin
+            // The partition model does not have an expected value for this word in RRAM, so there's
+            // nothing that we can check.
+            `uvm_info("unknown_mem_value",
+                      $sformatf({"As part of a SW read operation, we just read 32 bits from byte ",
+                                 "offset 0x%0h in RRAM (bus word %0d of RRAM word 0x%0h). The ",
+                                 "model of the data partition does not have a prediction for this ",
+                                 "word, so we cannot check it was supplied correctly."},
+                                m_fifo_ptr.next_d_bus_idx * 4,
+                                m_fifo_ptr.next_d_bus_idx % bus_words_per_word,
+                                m_fifo_ptr.next_d_bus_idx / bus_words_per_word),
+                      UVM_HIGH)
+          end else begin
+            if (item.d_data != exp_value.value) begin
+              `uvm_error("rdata_mismatch",
+                         $sformatf({"As part of a SW read operation, we just read 0x%0h from byte ",
+                                    "offset 0x%0h in RRAM (bus word %0d of RRAM word 0x%0h). The ",
+                                    "model predicted 0x%0h."},
+                                   item.d_data,
+                                   m_fifo_ptr.next_d_bus_idx * 4,
+                                   m_fifo_ptr.next_d_bus_idx % bus_words_per_word,
+                                   m_fifo_ptr.next_d_bus_idx / bus_words_per_word,
+                                   exp_value.value))
+            end
+          end
+
+          // Increment next_d_bus_idx. If this gets past last_bus_idx, mark the SW operation
+          // complete.
+          m_fifo_ptr.next_d_bus_idx++;
+          if (m_fifo_ptr.next_d_bus_idx > m_fifo_ptr.last_bus_idx) begin
+            end_sw_operation();
+          end
+        end
+      end
+      AddrWrite, DataWrite: begin
+        // Because this is a read-only memory, the infrastructure in
+        // cip_base_scoreboard::process_tl_*_item should have predicted an error and not passed the
+        // item down to process_tl_core_access (which called on_mem_access).
+        `uvm_fatal("missed_error",
+                   "Write access to read FIFO should have been caught by cip_base_scoreboard.")
+      end
+      default: `uvm_fatal("bad_phase", $sformatf("Unknown tl_phase: %0d", tl_phase))
+    endcase
+  end else begin
+    `uvm_fatal("new_mem", "Unknown memory not yet supported in on_mem_access.")
+  end
 endfunction : on_mem_access
+
+function bit rram_ctrl_scoreboard::is_sw_op_in_progress(bit write_op, bit d_channel);
+  int unsigned next_bus_idx;
+
+  // If write_op doesn't match m_fifo_ptr.is_write_op, there is either no operation in progress or
+  // it's the other operation.
+  if (write_op != m_fifo_ptr.is_write_op) return 0;
+
+  // If this is the right type of operation, there are still bus words expected on the appropriate
+  // channel if the appropriate next bus index is less than or equal to the last one.
+  next_bus_idx = (d_channel ? m_fifo_ptr.next_d_bus_idx : m_fifo_ptr.next_a_bus_idx);
+  return next_bus_idx <= m_fifo_ptr.last_bus_idx;
+endfunction
+
+function void rram_ctrl_scoreboard::start_sw_operation(bit [1:0] op, bit partition, bit [9:0] num);
+  int unsigned   read_subidx_after, write_subidx_after;
+  int unsigned   bus_words_per_word = DataWidth / 32;
+  uvm_reg_addr_t start_addr = ral.addr.start.get_mirrored_value();
+  int unsigned   first_bus_idx = start_addr / 4;
+  int unsigned   last_bus_idx = first_bus_idx + num;
+
+  `uvm_info("start_sw_opn",
+            $sformatf({"Starting software operation (op = %0d, partition = %0d, num = %0d). ",
+                       "ADDR is 0x%0h (so the operation covers addresses 0x%0h .. 0x%0h)"},
+                      op, partition, num,
+                      start_addr, start_addr, start_addr + (num + 1) * 4 - 1),
+            UVM_LOW)
+  // TODO: Make UVM_HIGH?
+
+  // Check that we don't believe an operation is already running. Our register model believes there
+  // is nothing running (otherwise this function would not have been called), but we should check
+  // that our fifo models agree.
+  if ((m_fifo_ptr.next_a_bus_idx <= m_fifo_ptr.last_bus_idx) ||
+      (m_fifo_ptr.next_d_bus_idx <= m_fifo_ptr.last_bus_idx)) begin
+    `uvm_error("overlapping_sw_ops",
+               $sformatf({"Reg modelling thought we could start a SW op but m_fifo_ptr has ",
+                          "bus indices 0x%0h, 0x%0h for a %0s operation with last bus idx 0x%0h."},
+                         m_fifo_ptr.next_a_bus_idx,
+                         m_fifo_ptr.next_d_bus_idx,
+                         m_fifo_ptr.is_write_op ? "write" : "read",
+                         m_fifo_ptr.last_bus_idx))
+  end
+
+  // Update the FIFO pointer to match, switching on the value being written to the OP field. The
+  // enum values are defined in rram_ctrl.hjson.
+  case (op)
+    0: begin // Read
+      m_fifo_ptr.is_write_op = 0;
+      m_fifo_ptr.first_bus_idx = first_bus_idx;
+      m_fifo_ptr.last_bus_idx = last_bus_idx;
+      m_fifo_ptr.next_a_bus_idx = first_bus_idx;
+      m_fifo_ptr.next_d_bus_idx = first_bus_idx;
+    end
+    1: begin // Write
+      if (first_bus_idx % bus_words_per_word) begin
+        // ADDR.START is not RRAM-word-aligned. This operation won't write to RRAM and will instead
+        // report an error.
+        //
+        // TODO(#31290): These errors are not yet modelled in the scoreboard.
+      end else begin
+        m_fifo_ptr.is_write_op = 1;
+        m_fifo_ptr.first_bus_idx = first_bus_idx;
+        m_fifo_ptr.last_bus_idx = last_bus_idx;
+        m_fifo_ptr.next_a_bus_idx = first_bus_idx;
+        m_fifo_ptr.next_d_bus_idx = first_bus_idx;
+      end
+    end
+    2: begin // Rewrite
+      // Nothing to do here: the Rewrite operation doesn't have any effect that is visible through
+      // rd_fifo or wr_fifo. Any other effects will be modelled elsewhere.
+    end
+    3: begin // Undefined op
+      // This operation is unsupported, which means that the operation will immediately complete
+      // with an error (raising the RECOV_ERR alert and setting OP_STATUS.ERR and ERR_CODE.OP_ERR)
+      //
+      // TODO(#31290): These errors are not yet modelled in the scoreboard.
+    end
+  endcase
+endfunction
+
+function void rram_ctrl_scoreboard::end_sw_operation();
+  m_cbs.make_direct_prediction(ral.control.start, 0);
+  m_fifo_ptr = '{default: 0, next_a_bus_idx: '1, next_d_bus_idx: '1};
+endfunction
 
 task rram_ctrl_scoreboard::process_tl_prim_access(tl_seq_item item, uvm_reg_addr_t csr_addr,
                                                   tl_phase_e tl_phase);
@@ -633,6 +1011,12 @@ function void rram_ctrl_scoreboard::reset(string kind = "HARD");
   m_seen_local_esc = 0;
   m_seen_sw_dis = 0;
   m_dis_sw_window_counter = 0;
+
+  // Zero out the FIFO pointer, which also clears any pending operation.
+  m_fifo_ptr = '{default: 0, next_a_bus_idx: '1, next_d_bus_idx: '1};
+
+  // Clear the queue that might have been tracking partially complete words for a SW operation.
+  m_fifo_pending.delete();
 
   // This function is called (by dv_base_scoreboard::monitor_reset) at the end of reset. Clear any
   // write transaction count on the partition models. Also, do backdoor reads of the underlying
