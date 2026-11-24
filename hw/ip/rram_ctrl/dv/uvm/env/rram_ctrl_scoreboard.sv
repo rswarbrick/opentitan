@@ -659,7 +659,7 @@ function void rram_ctrl_scoreboard::on_mem_access(tl_seq_item item, tl_phase_e t
           // of the bus_words_per_word words for an RRAM word, tell the partition model that the
           // RRAM word write is complete, popping the 32-bit items from m_write_fifo_pending.
           if ((m_fifo_ptr.next_d_bus_idx + 1) % bus_words_per_word == 0) begin
-            bit [DataWidth-1:0] wdata;
+            bit [DataWidth-1:0] wdata, enc_wdata, snooped_word;
 
             // There should be at least bus_words_per_word items in m_write_fifo_pending
             if (m_fifo_pending.size() < bus_words_per_word) begin
@@ -675,8 +675,23 @@ function void rram_ctrl_scoreboard::on_mem_access(tl_seq_item item, tl_phase_e t
               wdata[i * 32 +: 32] = m_fifo_pending.pop_front().value;
             end
 
-            m_data_partition.complete_write_operation(next_word_idx,
-                                                      encode_data(next_word_idx, wdata));
+            enc_wdata = encode_data(next_word_idx, wdata);
+
+            m_data_partition.complete_write_operation(next_word_idx, enc_wdata);
+
+            // Backdoor read RRAM to check that the RRAM word really has been written.
+            snooped_word = m_data_partition.backdoor_read_word(next_word_idx, m_data_bkdr_util);
+            if (snooped_word != enc_wdata) begin
+              `uvm_error("post_write_check",
+                         $sformatf({"When writing bus word 0x%0h to word index 0x%0h ",
+                                    "(byte offset 0x%0h), we expected address infection and ",
+                                    "scrambling to produce 0x%0h. The backdoor read found 0x%0h."},
+                                   wdata,
+                                   next_word_idx,
+                                   next_word_idx * (DataWidth / 8),
+                                   enc_wdata,
+                                   snooped_word))
+            end
           end
 
           // Either way, increment next_d_bus_idx

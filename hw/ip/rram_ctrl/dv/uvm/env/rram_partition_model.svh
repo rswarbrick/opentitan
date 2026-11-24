@@ -52,6 +52,10 @@ class rram_partition_model extends uvm_component;
   // Take a snapshot of the partition contents using a mem_bkdr_util.
   extern function void take_backdoor_snapshot(mem_bkdr_util bkdr_util);
 
+  // Load the value of a particular RRAM word using a mem_bkdr_util.
+  extern function logic [DataWidth-1:0] backdoor_read_word(int unsigned word_idx,
+                                                           mem_bkdr_util bkdr_util);
+
   // Called at the end of reset. Clear every word's pending_count.
   extern function void end_of_reset();
 
@@ -108,8 +112,6 @@ function void rram_partition_model::set_size_words(int unsigned size_words);
 endfunction
 
 function void rram_partition_model::take_backdoor_snapshot(mem_bkdr_util bkdr_util);
-  int unsigned bus_words_per_word = DataWidth / 32;
-
   if (m_words.size() == 0) `uvm_fatal("no_words", "The m_words model is not yet created.")
 
   // Check that the backdoor utility is wrapping a memory area large enough
@@ -125,14 +127,43 @@ function void rram_partition_model::take_backdoor_snapshot(mem_bkdr_util bkdr_ut
     // Don't bother loading the word if there's a write pending: we'll overwrite it shortly anyway.
     if (m_words[i].pending_count != 0) continue;
 
-    for (int unsigned j = 0; j < bus_words_per_word; j++) begin
-      raw_val[j * 32 +: 32] = bkdr_util.read32(4 * (bus_words_per_word * i + j));
-    end
+    raw_val = backdoor_read_word(i, bkdr_util);
+
     if (!$isunknown(raw_val)) begin
       m_words[i].value = raw_val;
       m_words[i].known = 1;
     end
   end
+endfunction
+
+function logic [DataWidth-1:0] rram_partition_model::backdoor_read_word(int unsigned  word_idx,
+                                                                        mem_bkdr_util bkdr_util);
+  int unsigned bus_words_per_word = DataWidth / 32;
+  logic [DataWidth-1:0] val;
+
+  // Check that this partition model expects the word to exist
+  if (word_idx >= m_words.size()) begin
+    `uvm_fatal("nonexistent_word",
+               $sformatf({"Cannot backdoor load word at index 0x%0h through the partition model: ",
+                          "the model only believes it has %0d (0x%0h) words."},
+                         word_idx, m_words.size(), m_words.size()))
+  end
+
+  // Similarly, check that the backdoor utility knows about the word.
+  if (bkdr_util.get_size_bytes() < (word_idx + 1) * (DataWidth / 8)) begin
+    `uvm_fatal("small_bkdr",
+               $sformatf("The backdoor utility is 0x%0h bytes long, so doesn't have ",
+                         "word 0x%0h (which would end at byte index 0x%0h).",
+                         bkdr_util.get_size_bytes(),
+                         word_idx,
+                         ((word_idx + 1) * (DataWidth / 8)) - 1))
+  end
+
+  for (int unsigned j = 0; j < bus_words_per_word; j++) begin
+    val[j * 32 +: 32] = bkdr_util.read32(4 * (bus_words_per_word * word_idx + j));
+  end
+
+  return val;
 endfunction
 
 function void rram_partition_model::end_of_reset();
